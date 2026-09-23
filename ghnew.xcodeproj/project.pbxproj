@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 56;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -161,7 +161,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 1540;
 				TargetAttributes = {
 					35841A1DF0DDE88BB92F02F2 = {
 						DevelopmentTeam = "";
@@ -177,8 +177,6 @@
 				en,
 			);
 			mainGroup = 01ADB844C58A4930A9EF2454;
-			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			productRefGroup = 2C0B2C1B378294AE14EC3617 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";

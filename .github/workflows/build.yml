@@ -12,12 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup XcodeGen
-        run: brew install xcodegen || true
-
-      - name: Generate Xcode project
-        run: xcodegen generate
-
       - name: Build for iOS device (unsigned)
         run: |
           set -o pipefail
