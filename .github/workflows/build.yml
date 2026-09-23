@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Compile iOS app (ghnew)
+    name: Compile iOS app -> .ipa (ghnew)
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -26,16 +26,28 @@ jobs:
             -destination 'generic/platform=iOS Simulator' -derivedDataPath ./build-sim \
             CODE_SIGNING_ALLOWED=NO build
 
-      - name: Upload device build artifact
+      - name: Package device .ipa
+        run: |
+          mkdir -p ./release-device/Payload
+          cp -R ./build/Build/Products/Debug-iphoneos/ghnew.app ./release-device/Payload/
+          cd ./release-device && zip -qr ghnew-device-unsigned.ipa Payload
+
+      - name: Package simulator .ipa
+        run: |
+          mkdir -p ./release-sim/Payload
+          cp -R ./build-sim/Build/Products/Debug-iphonesimulator/ghnew.app ./release-sim/Payload/
+          cd ./release-sim && zip -qr ghnew-simulator.ipa Payload
+
+      - name: Upload device .ipa artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ghnew-device-unsigned
-          path: build/Build/Products/Debug-iphoneos/ghnew.app
+          name: ghnew-device-unsigned-ipa
+          path: release-device/ghnew-device-unsigned.ipa
           if-no-files-found: warn
 
-      - name: Upload simulator build artifact
+      - name: Upload simulator .ipa artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ghnew-simulator
-          path: build-sim/Build/Products/Debug-iphonesimulator/ghnew.app
+          name: ghnew-simulator-ipa
+          path: release-sim/ghnew-simulator.ipa
           if-no-files-found: warn
