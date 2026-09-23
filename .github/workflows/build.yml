@@ -1,0 +1,47 @@
+# Build
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Compile iOS app (ghnew)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup XcodeGen
+        run: brew install xcodegen || true
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build for iOS device (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild -project ghnew.xcodeproj -scheme ghnew -configuration Debug \
+            -destination 'generic/platform=iOS' -derivedDataPath ./build \
+            CODE_SIGNING_ALLOWED=NO build
+
+      - name: Build for iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild -project ghnew.xcodeproj -scheme ghnew -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath ./build-sim \
+            CODE_SIGNING_ALLOWED=NO build
+
+      - name: Upload device build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghnew-device-unsigned
+          path: build/Build/Products/Debug-iphoneos/ghnew.app
+          if-no-files-found: warn
+
+      - name: Upload simulator build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghnew-simulator
+          path: build-sim/Build/Products/Debug-iphonesimulator/ghnew.app
+          if-no-files-found: warn
