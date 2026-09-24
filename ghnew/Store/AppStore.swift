@@ -243,6 +243,27 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// Refresh a single action's live status (used while a running action is on
+    /// screen, so its conclusion updates once the run finishes). Updates the
+    /// existing message in place instead of only inserting new ones.
+    func refreshActionStatus(for msg: GHMessage) async {
+        guard msg.kind == .action,
+              let repo = repos.first(where: { $0.id == msg.repoID }),
+              let runID = msg.runID else { return }
+        guard let run = try? await api.fetchRuns(owner: repo.owner, name: repo.name)
+            .first(where: { $0.id == runID }) else { return }
+        let start = run.run_started_at?.ghDate ?? run.created_at?.ghDate ?? msg.createdAt
+        var duration = msg.duration
+        if run.status == "completed", let end = run.updated_at?.ghDate {
+            duration = max(0, end.timeIntervalSince(start))
+        }
+        guard let idx = messages.firstIndex(where: { $0.id == msg.id }) else { return }
+        messages[idx].runStatus = run.status
+        messages[idx].runConclusion = run.conclusion
+        messages[idx].duration = duration
+        Persistence.saveMessage(messages[idx])
+    }
+
     // MARK: - Ingest
 
     private func processReleases(_ releases: [GHRelease], repo: TrackedRepo) -> Int? {

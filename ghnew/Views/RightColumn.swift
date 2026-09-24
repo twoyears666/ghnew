@@ -24,11 +24,29 @@ struct RightColumn: View {
         .background(Theme.columnBackground)
         .sheet(isPresented: $showLogin) { LoginSheet().environmentObject(store) }
         .task(id: store.selectedMessageID) {
-            await load()
+            await refreshLoop()
         }
     }
 
     // MARK: - Loading
+
+    /// Keeps the on-screen details fresh: loads on entry and, while a running
+    /// action is selected, polls its status (and details) every 20 s until the
+    /// run finishes. Task(id:) cancels this when the selection or the page goes away.
+    private func refreshLoop() async {
+        while !Task.isCancelled {
+            // Refresh live status first so a just-completed run is reflected before
+            // artifacts/annotations are (re)loaded.
+            if let msg = store.selectedMessage, msg.kind == .action {
+                await store.refreshActionStatus(for: msg)
+            }
+            await load()
+            guard let msg = store.selectedMessage,
+                  msg.kind == .action,
+                  msg.runStatus != "completed" else { return }
+            try? await Task.sleep(nanoseconds: 20_000_000_000)
+        }
+    }
 
     private func load() async {
         assets = []
@@ -44,7 +62,10 @@ struct RightColumn: View {
                 assets = (try? await api.fetchReleaseAssets(owner: owner, name: name, releaseID: rid)) ?? []
             }
         case .action:
-            if let runID = msg.runID {
+            // Only a run that actually concluded successfully has downloadable
+            // artifacts from that run; a failed/cancelled/in-flight run should not
+            // show artifacts that don't (reliably) exist for it.
+            if let runID = msg.runID, msg.runConclusion == "success" {
                 let all = (try? await api.fetchArtifacts(owner: owner, name: name)) ?? []
                 artifacts = all.filter { $0.workflow_run?.id == runID }
             }
