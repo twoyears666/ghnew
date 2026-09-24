@@ -17,6 +17,7 @@ final class AppStore: ObservableObject {
     @Published var repos: [TrackedRepo] = []
     @Published var messages: [GHMessage] = []       // all repos combined, newest first
     @Published var selectedRepoID: String?
+    @Published var currentUser: GitHubUser?
     @Published var isRefreshing = false
     @Published var errorMessage: String?
     @Published var showAddRepo = false
@@ -24,6 +25,9 @@ final class AppStore: ObservableObject {
     private let api = GitHubAPI.shared
     private var pollTask: Task<Void, Never>?
     private let pollInterval: TimeInterval = 300    // 5 minutes
+
+    /// True when we have both a stored token and a fetched user.
+    var isLoggedIn: Bool { currentUser?.login != nil && !(api.token ?? "").isEmpty }
 
     var selectedRepo: TrackedRepo? {
         repos.first { $0.id == selectedRepoID }
@@ -38,15 +42,50 @@ final class AppStore: ObservableObject {
     init() {
         repos = Persistence.loadRepos()
         messages = Persistence.loadMessages().sorted { $0.createdAt > $1.createdAt }
+        currentUser = Persistence.loadUser()
         if repos.first(where: { $0.id == selectedRepoID }) == nil {
             selectedRepoID = repos.first?.id
         }
         startPolling()
+        if isLoggedIn { Task { await verifyLogin() } }
+    }
+
+    // MARK: - Login
+
+    /// Validate the given token, store it and pull the current user.
+    func login(token raw: String) async throws {
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { throw APIError.badResponse }
+        api.token = t
+        guard let user = try await api.fetchUser() else {
+            throw APIError.badResponse
+        }
+        currentUser = user
+        Persistence.saveUser(user)
+    }
+
+    /// Invalidate the stored token and the cached user.
+    func logout() {
+        api.token = nil
+        currentUser = nil
+        Persistence.saveUser(nil)
+    }
+
+    /// Re-check a persisted token on launch; clear it if it's no longer valid.
+    private func verifyLogin() async {
+        guard let user = try? await api.fetchUser() else {
+            api.token = nil
+            currentUser = nil
+            Persistence.saveUser(nil)
+            return
+        }
+        currentUser = user
     }
 
     // MARK: - Repo management
 
-    func addRepo(owner: String, name: String, watchRelease: Bool, watchAction: Bool) async throws {
+    func addRepo(owner: String, name: String, watchRelease: Bool,
+                 watchAction: Bool, notify: Bool = true) async throws {
         let cleanedOwner = owner.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedOwner.isEmpty, !cleanedName.isEmpty else {
@@ -60,6 +99,7 @@ final class AppStore: ObservableObject {
         let actualName = gh.full_name.split(separator: "/").map(String.init).last ?? cleanedName
         let tracked = TrackedRepo(owner: cleanedOwner, name: actualName,
                                   watchRelease: watchRelease, watchAction: watchAction,
+                                  notify: notify,
                                   defaultBranch: gh.default_branch)
         repos.append(tracked)
         Persistence.saveRepos(repos)
@@ -180,7 +220,9 @@ final class AppStore: ObservableObject {
         guard !messages.contains(where: { $0.id == msg.id }) else { return false }
         messages.append(msg)
         Persistence.saveMessage(msg)
-        postNotification(for: msg)
+        if let repo = repos.first(where: { $0.id == msg.repoID }), repo.notify {
+            postNotification(for: msg)
+        }
         return true
     }
 

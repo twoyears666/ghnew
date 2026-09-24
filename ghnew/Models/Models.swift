@@ -8,22 +8,44 @@ struct TrackedRepo: Codable, Identifiable, Equatable {
     var name: String
     var watchRelease: Bool
     var watchAction: Bool
+    /// Whether new releases/actions should post a Notification Center banner.
+    var notify: Bool
     var defaultBranch: String?
     var lastSeenRelease: Int?   // highest GitHub release id already recorded
     var lastSeenRun: Int?       // highest workflow run id already recorded
     var addedAt: Date
 
     init(owner: String, name: String, watchRelease: Bool, watchAction: Bool,
-         defaultBranch: String? = nil, lastSeenRelease: Int? = nil,
-         lastSeenRun: Int? = nil, addedAt: Date = Date()) {
+         notify: Bool = true, defaultBranch: String? = nil,
+         lastSeenRelease: Int? = nil, lastSeenRun: Int? = nil, addedAt: Date = Date()) {
         self.owner = owner
         self.name = name
         self.watchRelease = watchRelease
         self.watchAction = watchAction
+        self.notify = notify
         self.defaultBranch = defaultBranch
         self.lastSeenRelease = lastSeenRelease
         self.lastSeenRun = lastSeenRun
         self.addedAt = addedAt
+    }
+
+    // Manual decoding so older persisted files (without `notify`) still load.
+    private enum CodingKeys: String, CodingKey {
+        case owner, name, watchRelease, watchAction, notify,
+             defaultBranch, lastSeenRelease, lastSeenRun, addedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        owner = try c.decode(String.self, forKey: .owner)
+        name = try c.decode(String.self, forKey: .name)
+        watchRelease = try c.decodeIfPresent(Bool.self, forKey: .watchRelease) ?? true
+        watchAction = try c.decodeIfPresent(Bool.self, forKey: .watchAction) ?? true
+        notify = try c.decodeIfPresent(Bool.self, forKey: .notify) ?? true
+        defaultBranch = try c.decodeIfPresent(String.self, forKey: .defaultBranch)
+        lastSeenRelease = try c.decodeIfPresent(Int.self, forKey: .lastSeenRelease)
+        lastSeenRun = try c.decodeIfPresent(Int.self, forKey: .lastSeenRun)
+        addedAt = try c.decodeIfPresent(Date.self, forKey: .addedAt) ?? Date()
     }
 }
 
@@ -102,6 +124,12 @@ struct GHRelease: Codable, Identifiable {
 struct GHAuthor: Codable {
     let login: String?
     let avatar_url: String?
+}
+
+/// The currently authenticated user (from GET /user).
+struct GitHubUser: Codable, Equatable {
+    var login: String?
+    var avatar_url: String?
 }
 
 struct GHRun: Codable, Identifiable {

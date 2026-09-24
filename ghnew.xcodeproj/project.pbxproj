@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0D4280D48E529B6C66C10CBF /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1138ECF0DB54915F9655E4E6 /* AppStore.swift */; };
 		2E26D3E6C1F22450EEC0D533 /* RightColumn.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6217F21CF6287DE4FC8D207 /* RightColumn.swift */; };
+		8F9E0A1B2C3D4E5F60718293 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13A5B62C74D83E92F014A5B6 /* LoginView.swift */; };
 		36B81D9F699841CCFFC945CE /* ghnewApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F86501FB005D057756161E9F /* ghnewApp.swift */; };
 		4276B78317E5222007B6F1AF /* ReleaseCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE77C3171F28EF23221BC2CB /* ReleaseCard.swift */; };
 		46700B1F865469022818C35C /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5892D0E27253F6E1A9781D3 /* Models.swift */; };
@@ -36,6 +37,7 @@
 		CE77C3171F28EF23221BC2CB /* ReleaseCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseCard.swift; sourceTree = "<group>"; };
 		D1CA9B78AE3EBAE2ED8226AA /* MiddleColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiddleColumn.swift; sourceTree = "<group>"; };
 		D6217F21CF6287DE4FC8D207 /* RightColumn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RightColumn.swift; sourceTree = "<group>"; };
+		13A5B62C74D83E92F014A5B6 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		E373E049BFB2334FAED4742F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		E5892D0E27253F6E1A9781D3 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		EEC73FE4370D5E97AF415B01 /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
@@ -111,6 +113,7 @@
 				D1CA9B78AE3EBAE2ED8226AA /* MiddleColumn.swift */,
 				CE77C3171F28EF23221BC2CB /* ReleaseCard.swift */,
 				D6217F21CF6287DE4FC8D207 /* RightColumn.swift */,
+				13A5B62C74D83E92F014A5B6 /* LoginView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -215,6 +218,7 @@
 				B6E4593347AC56B765D8745B /* Persistence.swift in Sources */,
 				4276B78317E5222007B6F1AF /* ReleaseCard.swift in Sources */,
 				2E26D3E6C1F22450EEC0D533 /* RightColumn.swift in Sources */,
+				8F9E0A1B2C3D4E5F60718293 /* LoginView.swift in Sources */,
 				CF73BDFEF4C033DB841401DA /* Theme.swift in Sources */,
 				36B81D9F699841CCFFC945CE /* ghnewApp.swift in Sources */,
 			);

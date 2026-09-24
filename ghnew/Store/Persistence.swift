@@ -71,6 +71,23 @@ enum Persistence {
     private static var reposURL: URL {
         documentsDirectory.appendingPathComponent("repos.json")
     }
+    private static let userKey = "ghUser"
+
+    // MARK: - Login user
+
+    static func loadUser() -> GitHubUser? {
+        guard let data = UserDefaults.standard.data(forKey: userKey),
+              let u = try? JSONDecoder().decode(GitHubUser.self, from: data) else { return nil }
+        return u
+    }
+
+    static func saveUser(_ user: GitHubUser?) {
+        if let user, let data = try? JSONEncoder().encode(user) {
+            UserDefaults.standard.set(data, forKey: userKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: userKey)
+        }
+    }
 
     static func loadRepos() -> [TrackedRepo] {
         guard let data = try? Data(contentsOf: reposURL) else { return [] }

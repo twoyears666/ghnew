@@ -52,6 +52,13 @@ final class GitHubAPI {
         return repo
     }
 
+    /// Fetch the currently authenticated user (requires a valid token).
+    func fetchUser() async throws -> GitHubUser? {
+        let (data, resp) = try await session.data(for: makeRequest("/user"))
+        try Self.throwIfErrors(data: data, response: resp)
+        return try? JSONDecoder().decode(GitHubUser.self, from: data)
+    }
+
     func fetchReleases(owner: String, name: String) async throws -> [GHRelease] {
         let path = "/repos/\(owner)/\(name)/releases?per_page=30"
         let (data, resp) = try await session.data(for: makeRequest(path))

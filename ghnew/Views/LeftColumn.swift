@@ -5,12 +5,13 @@ struct LeftColumn: View {
     @EnvironmentObject var store: AppStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
             Text("ghnew")
                 .font(.system(size: 20, weight: .bold))
                 .foregroundColor(Theme.textPrimary)
                 .padding(.horizontal, 14)
                 .padding(.top, 4)
+                .padding(.bottom, 8)
 
             ScrollView {
                 VStack(spacing: 6) {
@@ -34,8 +35,13 @@ struct LeftColumn: View {
                 .padding(6)
             }
             .padding(.horizontal, 8)
+
+            Spacer(minLength: 0)
+
+            Divider()
+            LoginFooter()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.columnBackground)
     }
 }
@@ -81,6 +87,7 @@ struct RepoRow: View {
 struct RepoAddRow: View {
     var body: some View {
         HStack {
+            Spacer(minLength: 0)
             Image(systemName: "plus")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(Theme.accentBlue)

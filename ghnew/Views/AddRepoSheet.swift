@@ -8,6 +8,7 @@ struct AddRepoSheet: View {
     @State private var repoInput = ""
     @State private var watchRelease = true
     @State private var watchAction = true
+    @State private var notify = true
     @State private var working = false
     @State private var errorText: String?
 
@@ -22,6 +23,7 @@ struct AddRepoSheet: View {
                 Section("Notifications") {
                     Toggle("Track releases", isOn: $watchRelease)
                     Toggle("Track actions", isOn: $watchAction)
+                    Toggle("Send notifications", isOn: $notify)
                 }
                 if let errorText {
                     Section {
@@ -63,7 +65,8 @@ struct AddRepoSheet: View {
         Task { @MainActor in
             do {
                 try await store.addRepo(owner: parts[0], name: parts[1],
-                                        watchRelease: watchRelease, watchAction: watchAction)
+                                        watchRelease: watchRelease, watchAction: watchAction,
+                                        notify: notify)
                 dismiss()
             } catch {
                 errorText = error.localizedDescription
