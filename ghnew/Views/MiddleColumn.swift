@@ -3,6 +3,7 @@ import SwiftUI
 /// Middle column: header with the selected repo name + message card list.
 struct MiddleColumn: View {
     @EnvironmentObject var store: AppStore
+    @EnvironmentObject var settings: AppSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

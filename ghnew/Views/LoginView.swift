@@ -13,72 +13,87 @@ struct SafariWebView: UIViewControllerRepresentable {
 }
 
 /// Bottom of the left column: circular avatar + bold username (or "登录" when
-/// logged out). Tapping opens a GitHub web popup (logged in) or the login sheet
-/// (logged out). Long-press to sign out.
+/// logged out), trailing gear button that opens settings. Tapping the account
+/// opens the login sheet (logged out) or a two-step sign-out flow (logged in).
+/// After a fresh login the first-login repo picker appears.
 struct LoginFooter: View {
     @EnvironmentObject var store: AppStore
+    @EnvironmentObject var settings: AppSettings
     @State private var showLogin = false
-    @State private var showWeb = false
+    @State private var showSettings = false
+    @State private var showSignOutPrompt = false
+    @State private var showSignOutConfirm = false
 
     private var avatarURL: URL? {
         guard let s = store.currentUser?.avatar_url, let u = URL(string: s) else { return nil }
         return u
     }
 
-    private var profileURL: URL {
-        guard let login = store.currentUser?.login, !login.isEmpty else {
-            return URL(string: "https://github.com")!
-        }
-        return URL(string: "https://github.com/\(login)")!
-    }
-
     var body: some View {
-        HStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill(Theme.repoRowSelected)
-                    .frame(width: 36, height: 36)
-                if store.isLoggedIn {
-                    AsyncImage(url: avatarURL) { phase in
-                        if case .success(let img) = phase {
-                            img.resizable().scaledToFill()
-                        } else {
-                            Image(systemName: "person.fill")
-                                .foregroundColor(Theme.textSecondary)
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(Theme.repoRowSelected)
+                        .frame(width: 36, height: 36)
+                    if store.isLoggedIn {
+                        AsyncImage(url: avatarURL) { phase in
+                            if case .success(let img) = phase {
+                                img.resizable().scaledToFill()
+                            } else {
+                                Image(systemName: "person.fill")
+                                    .foregroundColor(Theme.textSecondary)
+                            }
                         }
+                        .frame(width: 36, height: 36)
+                        .clipShape(Circle())
+                    } else {
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(Theme.textSecondary)
                     }
-                    .frame(width: 36, height: 36)
-                    .clipShape(Circle())
-                } else {
-                    // Person silhouette (circle + cut half-circle) when logged out.
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 20))
+                }
+                Text(store.isLoggedIn ? (store.currentUser?.login ?? Localization.L("login")) : Localization.L("login"))
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(Theme.textPrimary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 16))
                         .foregroundColor(Theme.textSecondary)
                 }
+                .buttonStyle(.plain)
             }
-            Text(store.isLoggedIn ? (store.currentUser?.login ?? "登录") : "登录")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundColor(Theme.textPrimary)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if store.isLoggedIn { showWeb = true } else { showLogin = true }
-        }
-        .contextMenu {
-            if store.isLoggedIn {
-                Button(role: .destructive) {
-                    store.logout()
-                } label: {
-                    Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+            .padding(10)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if store.isLoggedIn {
+                    showSignOutPrompt = true
+                } else {
+                    showLogin = true
                 }
             }
         }
         .sheet(isPresented: $showLogin) { LoginSheet().environmentObject(store) }
-        .fullScreenCover(isPresented: $showWeb) {
-            SafariWebView(url: profileURL).ignoresSafeArea()
+        .sheet(isPresented: $showSettings) { SettingsSheet().environmentObject(store) }
+        .sheet(isPresented: $store.showRepoPicker) { AddReposSheet().environmentObject(store) }
+        .confirmationDialog(Localization.L("signOutTitle"), isPresented: $showSignOutPrompt, titleVisibility: .visible) {
+            Button(Localization.L("logOut"), role: .destructive) {
+                showSignOutPrompt = false
+                showSignOutConfirm = true
+            }
+            Button(Localization.L("cancel"), role: .cancel) {}
+        }
+        .alert(Localization.L("signOutTitle"), isPresented: $showSignOutConfirm) {
+            Button(Localization.L("logOut"), role: .destructive) {
+                store.logout()
+            }
+            Button(Localization.L("cancel"), role: .cancel) {}
+        } message: {
+            Text(Localization.L("signOutConfirm"))
         }
     }
 }

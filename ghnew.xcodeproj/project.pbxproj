@@ -24,6 +24,13 @@
 		D1A860FFE33DBCB835262188 /* AddRepoSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFF58866DAB6BD559C24BC0D /* AddRepoSheet.swift */; };
 		ECA6F8F08E125E47B6150AA5 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A040F3C97610602AA39989C3 /* ContentView.swift */; };
 		F26A2672C11AE5EC6D1E270D /* GitHubAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70B71B0A274F6C72B71C7087 /* GitHubAPI.swift */; };
+		200000000000000000000001 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000001 /* AppSettings.swift */; };
+		200000000000000000000002 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000002 /* Localization.swift */; };
+		200000000000000000000003 /* SecretStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000003 /* SecretStore.swift */; };
+		200000000000000000000004 /* DownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000004 /* DownloadManager.swift */; };
+		200000000000000000000005 /* SettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000005 /* SettingsSheet.swift */; };
+		200000000000000000000006 /* RepoSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000006 /* RepoSettingsSheet.swift */; };
+		200000000000000000000007 /* AddReposSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000007 /* AddReposSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,6 +52,14 @@
 		F86501FB005D057756161E9F /* ghnewApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ghnewApp.swift; sourceTree = "<group>"; };
 		FB87DE992C92E6B5614C87E4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FFF58866DAB6BD559C24BC0D /* AddRepoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddRepoSheet.swift; sourceTree = "<group>"; };
+		100000000000000000000001 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		100000000000000000000002 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
+		100000000000000000000003 /* SecretStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretStore.swift; sourceTree = "<group>"; };
+		100000000000000000000004 /* DownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadManager.swift; sourceTree = "<group>"; };
+		100000000000000000000005 /* SettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSheet.swift; sourceTree = "<group>"; };
+		100000000000000000000006 /* RepoSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoSettingsSheet.swift; sourceTree = "<group>"; };
+		100000000000000000000007 /* AddReposSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddReposSheet.swift; sourceTree = "<group>"; };
+		100000000000000000000008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -60,6 +75,7 @@
 			isa = PBXGroup;
 			children = (
 				FB87DE992C92E6B5614C87E4 /* Assets.xcassets */,
+				100000000000000000000008 /* Info.plist */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -107,12 +123,15 @@
 			children = (
 				4D73F0C86D87104F50811D89 /* ActionCard.swift */,
 				FFF58866DAB6BD559C24BC0D /* AddRepoSheet.swift */,
+				100000000000000000000007 /* AddReposSheet.swift */,
 				F522312700E10DCCB5E90E94 /* Components.swift */,
 				33EE14564C279236A66B4879 /* LeftColumn.swift */,
 				1CC0838C82DCFCCBECB2B4AA /* MarkdownView.swift */,
 				D1CA9B78AE3EBAE2ED8226AA /* MiddleColumn.swift */,
 				CE77C3171F28EF23221BC2CB /* ReleaseCard.swift */,
+				100000000000000000000006 /* RepoSettingsSheet.swift */,
 				D6217F21CF6287DE4FC8D207 /* RightColumn.swift */,
+				100000000000000000000005 /* SettingsSheet.swift */,
 				13A5B62C74D83E92F014A5B6 /* LoginView.swift */,
 			);
 			path = Views;
@@ -122,7 +141,11 @@
 			isa = PBXGroup;
 			children = (
 				1138ECF0DB54915F9655E4E6 /* AppStore.swift */,
+				100000000000000000000001 /* AppSettings.swift */,
+				100000000000000000000004 /* DownloadManager.swift */,
+				100000000000000000000002 /* Localization.swift */,
 				EEC73FE4370D5E97AF415B01 /* Persistence.swift */,
+				100000000000000000000003 /* SecretStore.swift */,
 			);
 			path = Store;
 			sourceTree = "<group>";
@@ -206,18 +229,25 @@
 			buildActionMask = 2147483647;
 			files = (
 				8674880DFE3AA6E47CD40DB4 /* ActionCard.swift in Sources */,
+				200000000000000000000007 /* AddReposSheet.swift in Sources */,
 				D1A860FFE33DBCB835262188 /* AddRepoSheet.swift in Sources */,
+				200000000000000000000001 /* AppSettings.swift in Sources */,
 				0D4280D48E529B6C66C10CBF /* AppStore.swift in Sources */,
 				53AAC98856E2D82679D18199 /* Components.swift in Sources */,
 				ECA6F8F08E125E47B6150AA5 /* ContentView.swift in Sources */,
+				200000000000000000000004 /* DownloadManager.swift in Sources */,
 				F26A2672C11AE5EC6D1E270D /* GitHubAPI.swift in Sources */,
+				200000000000000000000002 /* Localization.swift in Sources */,
 				5A31E6F9FF70CED1D5B1ADD3 /* LeftColumn.swift in Sources */,
 				6B864A4E2B0C933E2CE88BF7 /* MarkdownView.swift in Sources */,
 				AD9E15A7CF16BD90C7719085 /* MiddleColumn.swift in Sources */,
 				46700B1F865469022818C35C /* Models.swift in Sources */,
 				B6E4593347AC56B765D8745B /* Persistence.swift in Sources */,
 				4276B78317E5222007B6F1AF /* ReleaseCard.swift in Sources */,
+				200000000000000000000006 /* RepoSettingsSheet.swift in Sources */,
 				2E26D3E6C1F22450EEC0D533 /* RightColumn.swift in Sources */,
+				200000000000000000000003 /* SecretStore.swift in Sources */,
+				200000000000000000000005 /* SettingsSheet.swift in Sources */,
 				8F9E0A1B2C3D4E5F60718293 /* LoginView.swift in Sources */,
 				CF73BDFEF4C033DB841401DA /* Theme.swift in Sources */,
 				36B81D9F699841CCFFC945CE /* ghnewApp.swift in Sources */,
@@ -235,7 +265,8 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = ghnew;
+					INFOPLIST_FILE = "ghnew/Resources/Info.plist";
+					INFOPLIST_KEY_CFBundleDisplayName = ghnew;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -385,7 +416,8 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = ghnew;
+					INFOPLIST_FILE = "ghnew/Resources/Info.plist";
+					INFOPLIST_KEY_CFBundleDisplayName = ghnew;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

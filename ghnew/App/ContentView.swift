@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var store: AppStore
+    @EnvironmentObject var settings: AppSettings
 
     var body: some View {
         GeometryReader { geo in

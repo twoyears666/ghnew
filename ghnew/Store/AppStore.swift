@@ -17,10 +17,14 @@ final class AppStore: ObservableObject {
     @Published var repos: [TrackedRepo] = []
     @Published var messages: [GHMessage] = []       // all repos combined, newest first
     @Published var selectedRepoID: String?
+    @Published var selectedMessageID: String?
     @Published var currentUser: GitHubUser?
     @Published var isRefreshing = false
     @Published var errorMessage: String?
     @Published var showAddRepo = false
+    @Published var showRepoPicker = false           // first-login repo selection
+    @Published var pendingOwner: String?
+    @Published var pendingName: String?
 
     private let api = GitHubAPI.shared
     private var pollTask: Task<Void, Never>?
@@ -31,6 +35,10 @@ final class AppStore: ObservableObject {
 
     var selectedRepo: TrackedRepo? {
         repos.first { $0.id == selectedRepoID }
+    }
+
+    var selectedMessage: GHMessage? {
+        messages.first { $0.id == selectedMessageID }
     }
 
     var messagesForSelected: [GHMessage] {
@@ -62,6 +70,7 @@ final class AppStore: ObservableObject {
         }
         currentUser = user
         Persistence.saveUser(user)
+        showRepoPicker = true          // first login → ask which repos to add
     }
 
     /// Invalidate the stored token and the cached user.
@@ -120,6 +129,79 @@ final class AppStore: ObservableObject {
     }
 
     func select(_ id: String) { selectedRepoID = id }
+
+    /// Choose which message the right column inspects (also selects its repo).
+    func selectMessage(_ id: String?) {
+        selectedMessageID = id
+        if let id, let msg = messages.first(where: { $0.id == id }) {
+            selectedRepoID = msg.repoID
+        }
+    }
+
+    /// Persist updated tracking options for an existing repo (long-press settings).
+    func updateRepo(_ repo: TrackedRepo) {
+        guard let idx = repos.firstIndex(where: { $0.id == repo.id }) else { return }
+        repos[idx] = repo
+        Persistence.saveRepos(repos)
+    }
+
+    /// Prefill and open the add-repo sheet for the given owner/name.
+    func prefillAddRepo(owner: String, name: String) {
+        pendingOwner = owner
+        pendingName = name
+        showAddRepo = true
+    }
+
+    /// Select the repo if already tracked; otherwise prefill the add sheet. Deep-link helper.
+    func openRepo(_ owner: String, _ name: String) {
+        let key = "\(owner.lowercased())/\(name.lowercased())"
+        if let repo = repos.first(where: { $0.id.lowercased() == key }) {
+            selectedRepoID = repo.id
+        } else {
+            prefillAddRepo(owner: owner, name: name)
+        }
+    }
+
+    /// Deep-link: select the release message matching repo+tag (refreshing first).
+    func openRelease(owner: String, name: String, tag: String) async {
+        openRepo(owner, name)
+        await refreshRepoNamed(owner, name)
+        selectedMessageID = messages.first {
+            $0.repoID.lowercased() == "\(owner.lowercased())/\(name.lowercased())"
+                && $0.kind == .release && ($0.releaseTag ?? "") == tag
+        }?.id
+    }
+
+    /// Deep-link: select the action message matching repo+run id.
+    func openAction(owner: String, name: String, runID: Int) async {
+        openRepo(owner, name)
+        await refreshRepoNamed(owner, name)
+        selectedMessageID = messages.first {
+            $0.repoID.lowercased() == "\(owner.lowercased())/\(name.lowercased())"
+                && $0.kind == .action && $0.runID == runID
+        }?.id
+    }
+
+    private func refreshRepoNamed(_ owner: String, _ name: String) async {
+        let key = "\(owner.lowercased())/\(name.lowercased())"
+        guard let repo = repos.first(where: { $0.id.lowercased() == key }) else { return }
+        await refreshRepo(repo)
+    }
+
+    // MARK: - Reset
+
+    /// Wipe all tracked data, messages, login and token.
+    func resetAll() {
+        for m in messages { Persistence.deleteMessage(m) }
+        messages.removeAll()
+        repos.removeAll()
+        Persistence.saveRepos(repos)
+        logout()
+        selectedRepoID = nil
+        selectedMessageID = nil
+        pendingOwner = nil
+        pendingName = nil
+    }
 
     // MARK: - Refresh / polling
 
@@ -201,7 +283,8 @@ final class AppStore: ObservableObject {
                                 createdAt: start,
                                 actionTitle: run.display_title?.nilIfEmpty ?? "Workflow run",
                                 runNumber: run.run_number,
-                                commitID: run.head_sha.map { String($0.prefix(7)) } ?? "",
+                                runID: run.id,
+                                commitID: run.head_sha,
                                 actor: actor.nilIfEmpty,
                                 branch: run.head_branch,
                                 runStatus: run.status,

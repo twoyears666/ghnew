@@ -72,6 +72,7 @@ struct GHMessage: Codable, Identifiable, Equatable {
     // Action fields
     var actionTitle: String?
     var runNumber: Int?
+    var runID: Int? = nil
     var commitID: String?
     var actor: String?
     var branch: String?
@@ -146,4 +147,68 @@ struct GHRun: Codable, Identifiable {
     let triggering_actor: GHAuthor?
     let actor: GHAuthor?
     let html_url: String?
+}
+
+// MARK: - Artifacts (Actions), assets (Releases), jobs & annotations
+
+/// A single Actions artifact. Used by GET /repos/{o}/{n}/actions/artifacts.
+struct GHArtifact: Codable, Identifiable {
+    let id: Int
+    let name: String?
+    let size_in_bytes: Int64?
+    let archive_download_url: String?
+    let expired: Bool?
+    let created_at: String?
+    let workflow_run: GHWorkflowRunRef?
+}
+
+struct GHWorkflowRunRef: Codable {
+    let id: Int?
+}
+
+/// A release asset. Used by GET /repos/{o}/{n}/releases/{id}/assets.
+struct GHAsset: Codable, Identifiable {
+    let id: Int
+    let name: String?
+    let size: Int64?
+    let browser_download_url: String?
+    let content_type: String?
+}
+
+/// A workflow job. Used by GET /repos/{o}/{n}/actions/runs/{id}/jobs.
+struct GHJob: Codable {
+    let id: Int?
+    let name: String?
+    let status: String?
+    let conclusion: String?
+}
+
+/// A check run reference. Used by GET /repos/{o}/{n}/commits/{sha}/check-runs.
+struct GHCheckRun: Codable {
+    let id: Int?
+    let conclusion: String?
+    let name: String?
+    let annotations_url: String?
+}
+
+/// A check-run annotation. Used by GET {annotations_url}.
+struct GHAnnotation: Codable {
+    let message: String?
+    let annotation_level: String?
+    let path: String?
+    let title: String?
+}
+
+/// One entry of GET /user/repos (used for the first-login repo picker).
+struct GHRepoListItem: Codable, Identifiable {
+    let id: Int
+    let full_name: String
+    let owner: GHOwnerRef?
+    let default_branch: String?
+    var ownerLogin: String { owner?.login ?? full_name.split(separator: "/").first.map(String.init) ?? "" }
+    var repoName: String { full_name.split(separator: "/").last.map(String.init) ?? "" }
+}
+
+struct GHOwnerRef: Codable {
+    let login: String?
 }

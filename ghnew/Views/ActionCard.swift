@@ -3,6 +3,7 @@ import SwiftUI
 /// An action (workflow run) card.
 struct ActionCard: View {
     let message: GHMessage
+    @EnvironmentObject var store: AppStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -32,7 +33,7 @@ struct ActionCard: View {
             }
             .foregroundColor(Theme.textSecondary)
 
-            // Stopwatch + duration + branch badge.
+            // Stopwatch + duration + branch badge + open.
             HStack(spacing: 6) {
                 Image(systemName: "stopwatch")
                     .font(.system(size: 11))
@@ -40,6 +41,15 @@ struct ActionCard: View {
                     .font(.system(size: 12))
                 BranchBadge(name: message.branch)
                 Spacer(minLength: 0)
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 11))
+                }
+                .foregroundColor(Theme.accentBlue)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    openExternal(message.actionsURL)
+                }
             }
             .foregroundColor(Theme.textSecondary)
         }
@@ -48,14 +58,14 @@ struct ActionCard: View {
         .ghCard()
         .contentShape(Rectangle())
         .onTapGesture {
-            openExternal(message.actionsURL)
+            store.selectMessage(message.id)
         }
     }
 
     private var summaryLine: Text {
         Text("development build").bold().underline()
         + Text("  #\(message.runNumber ?? 0): commit ")
-        + Text(message.commitID ?? "").underline()
+        + Text(message.commitID.map { String($0.prefix(7)) } ?? "").underline()
         + Text(" pushed by ")
         + Text(message.actor ?? "").underline()
     }

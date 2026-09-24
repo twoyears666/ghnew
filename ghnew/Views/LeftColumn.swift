@@ -3,6 +3,8 @@ import SwiftUI
 /// Left column: app title + tracked repo list + add button.
 struct LeftColumn: View {
     @EnvironmentObject var store: AppStore
+    @EnvironmentObject var settings: AppSettings
+    @State private var editingRepo: TrackedRepo?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -20,12 +22,17 @@ struct LeftColumn: View {
                                 isSelected: store.selectedRepoID == repo.id)
                             .onTapGesture { store.select(repo.id) }
                             .contextMenu {
+                                Button {
+                                    editingRepo = repo
+                                } label: {
+                                    Label(Localization.L("repoSettings"), systemImage: "slider.horizontal.3")
+                                }
                                 Button(role: .destructive) {
                                     if let idx = store.repos.firstIndex(where: { $0.id == repo.id }) {
                                         store.removeRepo(at: IndexSet(integer: idx))
                                     }
                                 } label: {
-                                    Label("Remove", systemImage: "trash")
+                                    Label(Localization.L("remove"), systemImage: "trash")
                                 }
                             }
                     }
@@ -43,6 +50,9 @@ struct LeftColumn: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.columnBackground)
+        .sheet(item: $editingRepo) { repo in
+            RepoSettingsSheet(repo: repo).environmentObject(store)
+        }
     }
 }
 

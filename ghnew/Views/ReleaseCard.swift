@@ -3,6 +3,7 @@ import SwiftUI
 /// A release card: version title, hollow colored pill, then the rendered changelog.
 struct ReleaseCard: View {
     let message: GHMessage
+    @EnvironmentObject var store: AppStore
 
     private var title: String {
         message.releaseTitle ?? "Release"
@@ -25,7 +26,11 @@ struct ReleaseCard: View {
                     Text("open")
                         .font(.system(size: 11))
                 }
-                .foregroundColor(Theme.textMuted)
+                .foregroundColor(Theme.accentBlue)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    openExternal(message.releaseURL)
+                }
             }
 
             if let body = message.releaseBody?.nilIfEmpty, !body.isEmpty {
@@ -37,7 +42,7 @@ struct ReleaseCard: View {
         .ghCard()
         .contentShape(Rectangle())
         .onTapGesture {
-            openExternal(message.releaseURL)
+            store.selectMessage(message.id)
         }
     }
 }

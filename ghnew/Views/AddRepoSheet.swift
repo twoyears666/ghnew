@@ -51,10 +51,17 @@ struct AddRepoSheet: View {
             }
         }
         .presentationDetents([.medium])
+        .onAppear {
+            if let o = store.pendingOwner, let n = store.pendingName, repoInput.isEmpty {
+                repoInput = "\(o)/\(n)"
+            }
+        }
     }
 
     private func save() {
         errorText = nil
+        store.pendingOwner = nil
+        store.pendingName = nil
         let parts = repoInput.split(separator: "/", maxSplits: 1)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
