@@ -51,7 +51,9 @@ struct RepoSettingsSheet: View {
                 }
             }
         }
+        #if os(iOS)
         .presentationDetents([.medium])
+        #endif
     }
 
     private func save() {

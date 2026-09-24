@@ -38,6 +38,19 @@ jobs:
           cp -R ./build-sim/Build/Products/Debug-iphonesimulator/ghnew.app ./release-sim/Payload/
           cd ./release-sim && zip -qr ghnew-simulator.ipa Payload
 
+      - name: Build for macOS
+        run: |
+          set -o pipefail
+          xcodebuild -project ghnew.xcodeproj -scheme ghnew -configuration Debug \
+            -destination 'generic/platform=macOS' -derivedDataPath ./build-mac \
+            CODE_SIGNING_ALLOWED=NO build
+
+      - name: Package macOS app
+        run: |
+          mkdir -p ./release-mac
+          cp -R ./build-mac/Build/Products/Debug/ghnew.app ./release-mac/
+          cd ./release-mac && zip -qr ghnew-macos.app.zip ghnew.app
+
       - name: Upload device .ipa artifact
         uses: actions/upload-artifact@v4
         with:
@@ -50,4 +63,11 @@ jobs:
         with:
           name: ghnew-simulator-ipa
           path: release-sim/ghnew-simulator.ipa
+          if-no-files-found: warn
+
+      - name: Upload macOS .app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghnew-macos.zip
+          path: release-mac/ghnew-macos.app.zip
           if-no-files-found: warn

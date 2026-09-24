@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(AppKit)
+import AppKit
+#endif
 
 // MARK: - Card styling (white bg, light-blue-gray border, rounded, subtle shadow)
 
@@ -94,5 +97,9 @@ struct RunStatusView: View {
 
 func openExternal(_ urlString: String?) {
     guard let urlString = urlString, let url = URL(string: urlString) else { return }
+    #if canImport(UIKit)
     UIApplication.shared.open(url, options: [:], completionHandler: nil)
+    #else
+    NSWorkspace.shared.open(url)
+    #endif
 }

@@ -1,6 +1,10 @@
 import Foundation
-import UIKit
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#else
+import AppKit
+#endif
 
 /// Tracks a single artifact/asset download with live progress.
 final class DownloadItem: Identifiable, ObservableObject {
@@ -97,11 +101,15 @@ final class DownloadManager: NSObject, ObservableObject {
     /// Present the downloaded file for saving / sharing via the Files app.
     func reveal(_ item: DownloadItem) {
         guard let url = item.fileURL else { return }
+        #if canImport(UIKit)
         let activity = UIActivityViewController(activityItems: [url], applicationActivities: nil)
         if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController {
             root.present(activity, animated: true)
         }
+        #else
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+        #endif
     }
 
     static func bytesString(_ bytes: Int64?) -> String {

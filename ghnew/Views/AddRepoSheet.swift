@@ -50,7 +50,9 @@ struct AddRepoSheet: View {
                 }
             }
         }
+        #if os(iOS)
         .presentationDetents([.medium])
+        #endif
         .onAppear {
             if let o = store.pendingOwner, let n = store.pendingName, repoInput.isEmpty {
                 repoInput = "\(o)/\(n)"

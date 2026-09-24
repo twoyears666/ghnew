@@ -1,4 +1,5 @@
 import SwiftUI
+#if canImport(UIKit)
 import SafariServices
 
 /// Wrapper around SFSafariViewController used for the GitHub web "popup".
@@ -11,6 +12,7 @@ struct SafariWebView: UIViewControllerRepresentable {
 
     func updateUIViewController(_ vc: SFSafariViewController, context: Context) {}
 }
+#endif
 
 /// Bottom of the left column: circular avatar + bold username (or "登录" when
 /// logged out), trailing gear button that opens settings. Tapping the account
@@ -121,7 +123,11 @@ struct LoginSheet: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     Button {
+                        #if os(iOS)
                         showTokenWeb = true
+                        #else
+                        openExternal("https://github.com/settings/tokens/new?scopes=repo&description=ghnew&type=classic")
+                        #endif
                     } label: {
                         Label("Create token on GitHub", systemImage: "safari")
                     }
@@ -151,11 +157,13 @@ struct LoginSheet: View {
                 }
             }
         }
+        #if os(iOS)
         .presentationDetents([.medium, .large])
         .fullScreenCover(isPresented: $showTokenWeb) {
             SafariWebView(url: URL(string: "https://github.com/settings/tokens/new?scopes=repo&description=ghnew&type=classic")!)
                 .ignoresSafeArea()
         }
+        #endif
     }
 
     private func login() {

@@ -62,7 +62,9 @@ struct SettingsSheet: View {
                 Text(Localization.L("resetPrompt"))
             }
         }
+        #if os(iOS)
         .presentationDetents([.medium, .large])
+        #endif
     }
 
     private func row(icon: String, title: String) -> some View {
