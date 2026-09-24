@@ -14,7 +14,7 @@ final class DownloadItem: Identifiable, ObservableObject {
     @Published var progress: Double = 0
     var fileURL: URL?
 
-    enum State {
+    enum State: Equatable {
         case idle
         case downloading
         case done
@@ -39,7 +39,7 @@ final class DownloadItem: Identifiable, ObservableObject {
 /// Central download manager. Its URLSession is configured with a main-actor
 /// delegate queue, so progress mutations happen on the main thread. Items are
 /// keyed by `"<kind>-<repoKey>-<assetId>"`.
-final class DownloadManager: ObservableObject {
+final class DownloadManager: NSObject, ObservableObject {
     static let shared = DownloadManager()
 
     @Published private(set) var items: [String: DownloadItem] = [:]
@@ -50,6 +50,7 @@ final class DownloadManager: ObservableObject {
     private let api = GitHubAPI.shared
 
     init() {
+        super.init()
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 120
         session = URLSession(configuration: config, delegate: self, delegateQueue: .main)
