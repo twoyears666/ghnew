@@ -50,7 +50,7 @@ enum SecretStore {
     static func deviceNumber() -> Data {
         if let existing = loadDeviceNumber() { return existing }
         var bytes = [UInt8](repeating: 0, count: 32)
-        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
+        if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) != errSecSuccess {
             // Extremely unlikely; fall back to a deterministic-per-install value.
             for i in 0..<bytes.count {
                 bytes[i] = UInt8.random(in: 0...255)
