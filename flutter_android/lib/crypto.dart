@@ -62,7 +62,7 @@ class SecretStore {
   static Future<List<int>> deviceNumber() async {
     final existing = await _storage.read(key: _deviceKey);
     if (existing != null && existing.isNotEmpty) {
-      return base64UrlDecode(existing);
+      return base64Url.decode(existing);
     }
     final rnd = Random.secure();
     final bytes = List<int>.generate(32, (_) => rnd.nextInt(256));

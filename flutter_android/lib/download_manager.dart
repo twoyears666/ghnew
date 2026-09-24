@@ -86,7 +86,7 @@ class DownloadManager extends ChangeNotifier {
       final client = http.Client();
       final resp = await client.send(req).timeout(const Duration(seconds: 20));
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
-        resp.drain<void>();
+        resp.stream.drain<void>();
         item.state = DlState.failed;
         item.error = 'HTTP ${resp.statusCode}';
         notifyListeners();

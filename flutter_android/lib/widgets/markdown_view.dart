@@ -16,7 +16,6 @@ class MarkdownView extends StatelessWidget {
       p: TextStyle(fontSize: base, height: 1.35, color: T.text),
       strong: TextStyle(fontWeight: FontWeight.bold, color: T.text),
       em: const TextStyle(fontStyle: FontStyle.italic),
-      emStrong: const TextStyle(fontStyle: FontStyle.italic, fontWeight: FontWeight.bold),
       code: TextStyle(
           fontSize: base - 1,
           fontFamily: 'monospace',
