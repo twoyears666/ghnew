@@ -156,6 +156,11 @@ extension DownloadManager: URLSessionDownloadDelegate {
             item.state = .done
             item.progress = 1
             item.fileURL = target
+            #if canImport(UIKit)
+            // On iOS, once a download finishes, present the Apple share sheet
+            // immediately so the user can save / AirDrop the file.
+            reveal(item)
+            #endif
         } catch {
             item.state = .failed(error.localizedDescription)
         }
