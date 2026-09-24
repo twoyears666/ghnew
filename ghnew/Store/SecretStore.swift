@@ -105,7 +105,7 @@ enum SecretStore {
 
     // MARK: - Encryption
 
-    /// Blob layout: version byte (0x01) + 12-byte nonce + 16-byte tag + ciphertext.
+    /// Blob layout: version byte (0x01) + sealed box (nonce || tag || ciphertext).
     private static func encrypt(_ token: String) -> String? {
         guard let data = token.data(using: .utf8) else { return nil }
         let key = SymmetricKey(data: SHA256.hash(data: deviceNumber()))
@@ -113,24 +113,19 @@ enum SecretStore {
         do { sealed = try AES.GCM.seal(data, using: key) }
         catch { return nil }
         var blob = Data([0x01])
-        blob.append(sealed.nonce.data)
-        blob.append(sealed.tag)
-        blob.append(sealed.ciphertext)
+        blob.append(sealed.combined)
         return blob.base64EncodedString()
     }
 
     private static func decrypt(_ base64: String) -> String? {
-        guard let blob = Data(base64Encoded: base64), blob.count > 13 else { return nil }
-        guard blob[0] == 0x01 else { return nil }
-        let nonceData = blob[1..<13]
-        let tagData = blob[13..<29]
-        let ciphertext = Data(blob[29...])
-        let nonce: AES.GCM.Nonce
-        do { nonce = try AES.GCM.Nonce(data: Data(nonceData)) }
-        catch { return nil }
+        guard let blob = Data(base64Encoded: base64), blob.count > 1, blob[0] == 0x01 else { return nil }
         let key = SymmetricKey(data: SHA256.hash(data: deviceNumber()))
-        let sealed = AES.GCM.SealedBox(nonce: nonce, ciphertext: ciphertext, tag: Data(tagData))
-        guard let opened = try? AES.GCM.open(sealed, using: key) else { return nil }
-        return String(data: opened, encoding: .utf8)
+        do {
+            let sealed = try AES.GCM.SealedBox(combined: blob.dropFirst())
+            guard let opened = try? AES.GCM.open(sealed, using: key) else { return nil }
+            return String(data: opened, encoding: .utf8)
+        } catch {
+            return nil
+        }
     }
 }

@@ -49,7 +49,7 @@ final class DownloadManager: NSObject, ObservableObject {
 
     private let api = GitHubAPI.shared
 
-    init() {
+    override init() {
         super.init()
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 120
