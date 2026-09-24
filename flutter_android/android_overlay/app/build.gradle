@@ -20,7 +20,7 @@ if (flutterRoot == null) {
 android {
     namespace = "com.twoyears666.ghnew"
 
-    compileSdk = 35
+    compileSdk = 36
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
