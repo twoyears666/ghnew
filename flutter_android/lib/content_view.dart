@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../app_store.dart';
 import '../theme.dart';
-import 'columns.dart';
-import 'markdown_view.dart';
-import 'sheets.dart';
+import 'widgets/columns.dart';
+import 'widgets/markdown_view.dart';
+import 'widgets/sheets.dart';
 
 /// Portrait drill-down level (prevents the three panes squeezing together).
 enum Level { left, middle, right }

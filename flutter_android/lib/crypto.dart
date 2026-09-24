@@ -94,6 +94,7 @@ class SecretStore {
       final box = SecretBox.fromConcatenation(
         payload,
         nonceLength: alg.nonceLength,
+        macLength: 16,
       );
       final key = await _aesKey();
       final clear = await alg.decrypt(box, secretKey: key);

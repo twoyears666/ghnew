@@ -19,6 +19,7 @@ if (flutterRoot == null) {
 
 android {
     namespace = "com.twoyears666.ghnew"
+
     compileSdk = flutter.compileSdkVersion
 
     compileOptions {

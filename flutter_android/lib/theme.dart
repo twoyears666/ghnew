@@ -46,7 +46,7 @@ class Palette {
   });
 }
 
-const lightPalette = Palette(
+final lightPalette = Palette(
   pageBackground: Color(0xFFEEF1F6),
   columnBackground: Color(0xFFE9EDF3),
   repoRowSelected: Color(0xFFC7D0DC),
@@ -68,7 +68,7 @@ const lightPalette = Palette(
   prereleaseBrown: Color(0xFF9A6700),
 );
 
-const darkPalette = Palette(
+final darkPalette = Palette(
   pageBackground: Color(0xFF14161B),
   columnBackground: Color(0xFF1A1D24),
   repoRowSelected: Color(0xFF35404F),
