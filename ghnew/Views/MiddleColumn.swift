@@ -14,21 +14,32 @@ struct MiddleColumn: View {
                     .foregroundColor(Theme.textPrimary)
                     .lineLimit(1)
                 Spacer(minLength: 12)
-                HStack(spacing: 4) {
-                    if store.isRefreshing {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 13, weight: .semibold))
+                HStack(spacing: 12) {
+                    if let repo = store.selectedRepo,
+                       let url = URL(string: "https://github.com/\(repo.owner)/\(repo.name)") {
+                        ShareLink(item: url) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundColor(Theme.accentBlue)
+                        .buttonStyle(.plain)
                     }
-                    Text("Refresh")
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .foregroundColor(Theme.accentBlue)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    Task { await store.refreshAll() }
+                    HStack(spacing: 4) {
+                        if store.isRefreshing {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        Text("Refresh")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundColor(Theme.accentBlue)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        Task { await store.refreshAll() }
+                    }
                 }
             }
             .padding(.horizontal, 14)

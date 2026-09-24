@@ -186,6 +186,14 @@ struct RightColumn: View {
                         .foregroundColor(Theme.accentBlue)
                 }
                 .buttonStyle(.plain)
+                if let url = msg.releaseURL.flatMap(URL.init) {
+                    ShareLink(item: url) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 14))
+                            .foregroundColor(Theme.accentBlue)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             HStack(spacing: 6) {
                 PillBadge(text: msg.releaseBadge,
@@ -212,6 +220,14 @@ struct RightColumn: View {
                 }
             }
             Spacer(minLength: 0)
+            if let url = msg.actionsURL.flatMap(URL.init) {
+                ShareLink(item: url) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 14))
+                        .foregroundColor(Theme.accentBlue)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
