@@ -113,7 +113,8 @@ enum SecretStore {
         do { sealed = try AES.GCM.seal(data, using: key) }
         catch { return nil }
         var blob = Data([0x01])
-        blob.append(sealed.combined)
+        guard let combined = sealed.combined else { return nil }
+        blob.append(combined)
         return blob.base64EncodedString()
     }
 
