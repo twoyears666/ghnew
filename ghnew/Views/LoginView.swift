@@ -120,8 +120,10 @@ struct LoginSheet: View {
                 }
                 Section("Token") {
                     SecureField("ghp_...", text: $token)
+                        #if os(iOS)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        #endif
                     Button {
                         #if os(iOS)
                         showTokenWeb = true

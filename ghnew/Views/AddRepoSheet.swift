@@ -17,8 +17,10 @@ struct AddRepoSheet: View {
             Form {
                 Section("Repository") {
                     TextField("owner / repository", text: $repoInput)
+                        #if os(iOS)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+                        #endif
                 }
                 Section("Notifications") {
                     Toggle("Track releases", isOn: $watchRelease)
