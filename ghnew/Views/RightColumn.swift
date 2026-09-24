@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Right column — shows the detail for the selected message (release or action),
-/// including the changelog / progress / warnings and the downloadable artifacts.
+/// including the changelog / progress / annotations and the downloadable artifacts.
 struct RightColumn: View {
     @EnvironmentObject var store: AppStore
     @EnvironmentObject var settings: AppSettings
@@ -9,7 +9,7 @@ struct RightColumn: View {
 
     @State private var assets: [GHAsset] = []
     @State private var artifacts: [GHArtifact] = []
-    @State private var warnings: [GHAnnotation] = []
+    @State private var annotations: [GHAnnotation] = []
     @State private var showLogin = false
 
     var body: some View {
@@ -51,7 +51,7 @@ struct RightColumn: View {
     private func load() async {
         assets = []
         artifacts = []
-        warnings = []
+        annotations = []
         guard let msg = store.selectedMessage, let repo = store.selectedRepo else { return }
         let owner = repo.owner, name = repo.name
         let api = GitHubAPI.shared
@@ -70,15 +70,15 @@ struct RightColumn: View {
                 artifacts = all.filter { $0.workflow_run?.id == runID }
             }
             if let sha = msg.commitID, !sha.isEmpty {
-                var warn: [GHAnnotation] = []
+                var collected: [GHAnnotation] = []
                 let checks = (try? await api.fetchCheckRuns(owner: owner, name: name, headSHA: sha)) ?? []
                 for c in checks {
                     if let u = c.annotations_url, let url = URL(string: u) {
                         let anns = (try? await api.fetchAnnotations(url: url)) ?? []
-                        warn.append(contentsOf: anns.filter { $0.annotation_level == "warning" })
+                        collected.append(contentsOf: anns)
                     }
                 }
-                warnings = warn
+                annotations = collected
             }
         }
     }
@@ -138,12 +138,12 @@ struct RightColumn: View {
                     section(Localization.L("progress")) {
                         ActionProgressView(message: msg)
                     }
-                    section(Localization.L("warnings")) {
-                        if warnings.isEmpty {
-                            hint(Localization.L("noWarnings"))
+                    section(Localization.L("annotations")) {
+                        if annotations.isEmpty {
+                            hint(Localization.L("noAnnotations"))
                         } else {
                             VStack(spacing: 6) {
-                                ForEach(Array(warnings.enumerated()), id: \.offset) { _, w in
+                                ForEach(Array(annotations.enumerated()), id: \.offset) { _, w in
                                     HStack(alignment: .top, spacing: 6) {
                                         Image(systemName: "exclamationmark.triangle.fill")
                                             .foregroundColor(Theme.prereleaseBrown)
