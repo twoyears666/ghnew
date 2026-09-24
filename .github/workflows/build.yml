@@ -71,3 +71,47 @@ jobs:
           name: ghnew-macos.zip
           path: release-mac/ghnew-macos.app.zip
           if-no-files-found: warn
+
+  apk:
+    name: Build Android APK (flutter)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Build APK
+        run: |
+          set -o pipefail
+          cd flutter_android
+          # Generate the official Gradle wrapper in a scratch dir so its version
+          # matches the installed Flutter SDK, then copy ONLY the wrapper files.
+          # (flutter create . on the project itself would overwrite our custom
+          # android/app/AndroidManifest.xml, build.gradle and MainActivity, so we
+          # keep them untouched here.)
+          scratch="$(mktemp -d)"
+          (
+            cd "$scratch"
+            flutter create --project-name ghnew_android --org com.twoyears666 --platforms=android . >/dev/null
+          )
+          cp "$scratch/android/gradlew" android/gradlew
+          cp "$scratch/android/gradlew.bat" android/gradlew.bat
+          mkdir -p android/gradle/wrapper
+          cp -R "$scratch/android/gradle/wrapper/." android/gradle/wrapper/
+          chmod +x android/gradlew
+          flutter pub get
+          flutter build apk --release
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghnew-android.apk
+          path: flutter_android/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: warn

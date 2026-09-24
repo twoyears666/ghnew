@@ -1,0 +1,27 @@
+name: ghnew_android
+description: GitHub release & Actions tracker — Android (Flutter port of ghnew).
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.1.0
+  cryptography: ^2.7.0
+  flutter_secure_storage: ^9.0.0
+  shared_preferences: ^2.2.2
+  path_provider: ^2.1.1
+  path: ^1.9.0
+  url_launcher: ^6.2.2
+  share_plus: ^7.2.1
+  flutter_markdown: ^0.6.14
+  app_links: ^6.1.1
+
+dev_dependencies:
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
