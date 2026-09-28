@@ -97,7 +97,7 @@ class DownloadManager extends ChangeNotifier {
       final dir = Directory(p.join(
           (await getApplicationDocumentsDirectory()).path, 'Downloads'));
       await dir.create(recursive: true);
-      final file = await _targetFile(dir, item.name);
+      final file = await _targetFile(dir, item);
       final sink = file.openWrite();
       try {
         await for (final chunk in resp.stream) {
@@ -125,8 +125,13 @@ class DownloadManager extends ChangeNotifier {
     }
   }
 
-  Future<File> _targetFile(Directory dir, String rawName) async {
-    final safe = rawName.replaceAll('/', '_');
+  Future<File> _targetFile(Directory dir, DownloadItem item) async {
+    var safe = item.name.replaceAll('/', '_');
+    // Actions artifacts are always served as zip archives, and GitHub's
+    // artifact name carries no extension — add one so the saved file keeps it.
+    if (item.id.startsWith('act-') && p.extension(safe).isEmpty) {
+      safe = '$safe.zip';
+    }
     final ext = p.extension(safe);
     final base = p.basenameWithoutExtension(safe);
     var target = p.join(dir.path, safe);

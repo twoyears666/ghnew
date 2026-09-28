@@ -170,7 +170,15 @@ extension DownloadManager: URLSessionDownloadDelegate {
         let dir = Persistence.documentsDirectory.appendingPathComponent("Downloads")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let safeName = item.name.replacingOccurrences(of: "/", with: "_")
-        var target = dir.appendingPathComponent(safeName)
+        // Actions artifacts are always served as zip archives, and GitHub's
+        // artifact name carries no extension — add one so the saved file keeps it.
+        let fileName: String
+        if key.hasPrefix("act-"), (safeName as NSString).pathExtension.isEmpty {
+            fileName = safeName + ".zip"
+        } else {
+            fileName = safeName
+        }
+        var target = dir.appendingPathComponent(fileName)
         var counter = 1
         while FileManager.default.fileExists(atPath: target.path) {
             let ext = target.pathExtension
