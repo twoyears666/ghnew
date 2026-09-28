@@ -99,18 +99,46 @@ final class DownloadManager: NSObject, ObservableObject {
     }
 
     /// Present the downloaded file for saving / sharing via the Files app.
+    ///
+    /// Safe to call from the download delegate the instant a transfer finishes:
+    /// the presentation is deferred to the next runloop turn (never inside the
+    /// URLSession callback), and on iPad the activity controller gets a popover
+    /// anchor — presenting it without one raises an exception and crashes.
     func reveal(_ item: DownloadItem) {
         guard let url = item.fileURL else { return }
         #if canImport(UIKit)
-        let activity = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController {
-            root.present(activity, animated: true)
+        DispatchQueue.main.async {
+            guard let scene = UIApplication.shared.connectedScenes
+                    .compactMap({ $0 as? UIWindowScene })
+                    .first(where: { $0.activationState == .foregroundActive }),
+                  let window = scene.windows.first(where: { $0.isKeyWindow }),
+                  let presenter = DownloadManager.topmostPresentable(window.rootViewController)
+            else { return }
+            let activity = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+            // iPad presents this modally as a popover; it must have an anchor.
+            if let popover = activity.popoverPresentationController {
+                popover.sourceView = presenter.view
+                popover.sourceRect = CGRect(x: presenter.view.bounds.midX,
+                                            y: presenter.view.bounds.midY,
+                                            width: 0, height: 0)
+                popover.permittedArrowDirections = []
+            }
+            presenter.present(activity, animated: true)
         }
         #else
         NSWorkspace.shared.activateFileViewerSelecting([url])
         #endif
     }
+
+    #if canImport(UIKit)
+    /// Walk to the deepest presented controller and only return it if its view is
+    /// actually on screen, so we never present on a detached controller.
+    private static func topmostPresentable(_ root: UIViewController?) -> UIViewController? {
+        guard var current = root else { return nil }
+        while let presented = current.presentedViewController { current = presented }
+        return current.viewIfLoaded?.window != nil ? current : nil
+    }
+    #endif
 
     static func bytesString(_ bytes: Int64?) -> String {
         guard let bytes, bytes >= 0 else { return "" }
