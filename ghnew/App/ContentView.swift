@@ -32,14 +32,18 @@ struct ContentView: View {
     }
 
     /// Wide (landscape) layout: all three columns side by side.
+    /// The right (detail) column takes at least one third of the space shared by
+    /// the middle + right columns, so it is no longer the narrowest one.
     private func landscapeBody(width: CGFloat) -> some View {
-        HStack(spacing: 0) {
+        let leftFraction: CGFloat = 0.24
+        let rightWidth = width * (1 - leftFraction) / 3
+        return HStack(spacing: 0) {
             LeftColumn()
-                .frame(width: width * 0.24)
+                .frame(width: width * leftFraction)
             MiddleColumn()
                 .frame(maxWidth: .infinity)
             RightColumn()
-                .frame(width: width * 0.20)
+                .frame(width: rightWidth)
         }
         .background(Theme.pageBackground)
     }

@@ -85,12 +85,16 @@ class _ContentViewState extends State<ContentView> {
   }
 
   Widget _landscape(double width) {
+    // The right (detail) column takes at least one third of the space shared by
+    // the middle + right columns, so it is no longer the narrowest one.
+    const leftFraction = 0.24;
+    final rightWidth = width * (1 - leftFraction) / 3;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(width: width * 0.24, child: const LeftColumn()),
+        SizedBox(width: width * leftFraction, child: const LeftColumn()),
         const Expanded(child: MiddleColumn()),
-        SizedBox(width: width * 0.20, child: const RightColumn()),
+        SizedBox(width: rightWidth, child: const RightColumn()),
       ],
     );
   }
