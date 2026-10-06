@@ -192,6 +192,20 @@ class SettingsSheet extends StatelessWidget {
                       ),
                     ]),
                     const SizedBox(height: 16),
+                    _sectionTitle(L.str('downloadSection')),
+                    _card([
+                      SwitchListTile(
+                        title: Text(L.str('autoUnzip'),
+                            style: TextStyle(color: T.text)),
+                        subtitle: Text(L.str('autoUnzipHint'),
+                            style: TextStyle(fontSize: 12, color: T.text2)),
+                        value: SettingsStore.i.autoUnzipArtifacts,
+                        activeThumbColor: T.blue,
+                        onChanged: (v) =>
+                            SettingsStore.i.autoUnzipArtifacts = v,
+                      ),
+                    ]),
+                    const SizedBox(height: 16),
                     _sectionTitle(L.str('support')),
                     _card([
                       _row(Icons.bug_report_outlined, L.str('openIssue'),

@@ -96,7 +96,12 @@ enum Localization {
         "artifactRiskWarn": ("产物下载需要鉴权，走第三方中转可能失败，并会向节点暴露你的令牌，请谨慎开启。", "Artifacts require auth; a third-party relay may fail and exposes your token to the node. Enable with caution."),
         "concLevel": ("并发数", "Concurrency"),
         "relayHint": ("开启后，公开的 Release 资源将通过所选镜像节点下载。", "When on, public release assets download through the selected mirror."),
-        "concHint": ("将单个文件切成多段并行下载以提速；连接数过多容易触发限流，探测到不支持时自动回退单线程。", "Splits a single file into parallel chunks for speed; too many connections may hit rate limits and it falls back to single-thread when unsupported.")
+        "concHint": ("将单个文件切成多段并行下载以提速；连接数过多容易触发限流，探测到不支持时自动回退单线程。", "Splits a single file into parallel chunks for speed; too many connections may hit rate limits and it falls back to single-thread when unsupported."),
+
+        // Downloads 下载
+        "downloadSection": ("下载", "Downloads"),
+        "autoUnzip": ("自动解压 Actions 产物", "Auto-unzip actions artifacts"),
+        "autoUnzipHint": ("产物均为 zip 压缩包，下载完成后自动解压到同名文件夹（原 zip 保留）。", "Artifacts are zip archives; unpack them into a like-named folder after download (the zip is kept).")
     ]
 
     static func L(_ key: String) -> String {

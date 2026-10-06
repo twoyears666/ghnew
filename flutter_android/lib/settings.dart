@@ -21,6 +21,7 @@ class SettingsStore extends ChangeNotifier {
   static const _concKey = 'ghSettings.accel.conc.enabled';
   static const _concLevelKey = 'ghSettings.accel.conc.level';
   static const _concArtifactsKey = 'ghSettings.accel.conc.artifacts';
+  static const _autoUnzipKey = 'ghSettings.download.autoUnzip';
 
   bool _isDark = false;
   bool get isDark => _isDark;
@@ -99,6 +100,18 @@ class SettingsStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ============================ Downloads ============================
+
+  /// Actions 产物下载后自动解压（默认开）
+  bool _autoUnzipArtifacts = true;
+  bool get autoUnzipArtifacts => _autoUnzipArtifacts;
+  set autoUnzipArtifacts(bool v) {
+    if (_autoUnzipArtifacts == v) return;
+    _autoUnzipArtifacts = v;
+    SharedPreferences.getInstance().then((p) => p.setBool(_autoUnzipKey, v));
+    notifyListeners();
+  }
+
   /// Load persisted settings; default language follows the device locale.
   Future<void> init() async {
     final p = await SharedPreferences.getInstance();
@@ -121,5 +134,6 @@ class SettingsStore extends ChangeNotifier {
     final level = p.getInt(_concLevelKey);
     _concLevel = (level == null || level == 0) ? 4 : level;
     _concArtifacts = p.getBool(_concArtifactsKey) ?? false;
+    _autoUnzipArtifacts = p.getBool(_autoUnzipKey) ?? true;
   }
 }

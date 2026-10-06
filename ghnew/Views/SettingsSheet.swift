@@ -21,6 +21,15 @@ struct SettingsSheet: View {
                     }
                 }
 
+                Section(Localization.L("downloadSection")) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle(Localization.L("autoUnzip"), isOn: $settings.autoUnzipArtifacts)
+                        Text(Localization.L("autoUnzipHint"))
+                            .font(.system(size: 12))
+                            .foregroundColor(Theme.textMuted)
+                    }
+                }
+
                 Section(Localization.L("support")) {
                     Button {
                         openExternal("https://github.com/twoyears666/ghnew/issues/new")

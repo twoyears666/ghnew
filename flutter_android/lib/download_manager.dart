@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
@@ -146,6 +147,7 @@ class DownloadManager extends ChangeNotifier {
       item.state = DlState.done;
       item.progress = 1;
       notifyListeners();
+      unawaited(_autoUnzipIfNeeded(item.id, file));
     } catch (e) {
       item.state = DlState.failed;
       item.error = e.toString();
@@ -278,6 +280,7 @@ class DownloadManager extends ChangeNotifier {
       item.state = DlState.done;
       item.progress = 1;
       notifyListeners();
+      unawaited(_autoUnzipIfNeeded(item.id, target));
     } catch (e) {
       item.state = DlState.failed;
       item.error = e.toString();
@@ -301,6 +304,50 @@ class DownloadManager extends ChangeNotifier {
 
   Future<File> _targetFile(Directory dir, DownloadItem item) =>
       _uniqueFile(dir, _desiredFileName(item.id, item.name));
+
+  /// Actions artifacts are zip archives (given a `.zip` suffix on save). When the
+  /// user has auto-unzip on, unpack the archive into a sibling folder. A failure
+  /// simply leaves the original `.zip`.
+  static Future<void> _autoUnzipIfNeeded(String key, File file) async {
+    if (!key.startsWith('act-')) return;
+    if (!SettingsStore.i.autoUnzipArtifacts) return;
+    if (p.extension(file.path).toLowerCase() != '.zip') return;
+    final parent = file.parent;
+    final base = p.basenameWithoutExtension(file.path);
+    final dest = await _uniqueDirectory(parent, base);
+    try {
+      await dest.create(recursive: true);
+      final archive = ZipDecoder().decodeBytes(await file.readAsBytes());
+      for (final entry in archive.files) {
+        if (!entry.isFile) continue;
+        final name = _sanitize(entry.name);
+        if (name.isEmpty) continue;
+        final out = File(p.join(dest.path, name));
+        await out.create(recursive: true);
+        await out.writeAsBytes(entry.content as List<int>);
+      }
+    } catch (_) {
+      try {
+        await dest.delete(recursive: true);
+      } catch (_) {}
+    }
+  }
+
+  /// Drop `.`/`..` components so a crafted entry can never escape `dest`.
+  static String _sanitize(String name) => name
+      .split('/')
+      .where((s) => s.isNotEmpty && s != '.' && s != '..')
+      .join('/');
+
+  /// A non-existing folder next to the archive, appending " (n)" if needed.
+  static Future<Directory> _uniqueDirectory(Directory parent, String name) async {
+    var candidate = Directory(p.join(parent.path, name));
+    var counter = 1;
+    while (await candidate.exists()) {
+      candidate = Directory(p.join(parent.path, '$name (${counter++})'));
+    }
+    return candidate;
+  }
 
   /// Never clobber an existing file: append " (n)" until the name is free.
   Future<File> _uniqueFile(Directory dir, String fileName) async {

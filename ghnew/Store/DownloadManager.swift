@@ -69,6 +69,7 @@ final class DownloadManager: NSObject, ObservableObject {
                 item.state = .done
                 item.progress = 1
                 item.fileURL = url
+                DownloadManager.autoUnzipIfNeeded(key: key, file: url)
                 #if canImport(UIKit)
                 self.reveal(item)
                 #endif
@@ -181,6 +182,37 @@ final class DownloadManager: NSObject, ObservableObject {
         return target
     }
 
+    /// Actions artifacts are zip archives (given a `.zip` suffix on save). When
+    /// the user has auto-unzip on, unpack the archive into a sibling folder.
+    /// Runs off the main thread; a failure simply leaves the original `.zip`.
+    private static func autoUnzipIfNeeded(key: String, file: URL) {
+        guard key.hasPrefix("act-"), AppSettings.shared.autoUnzipArtifacts,
+              file.pathExtension.lowercased() == "zip" else { return }
+        DispatchQueue.global(qos: .utility).async {
+            let parent = file.deletingLastPathComponent()
+            let base = file.deletingPathExtension().lastPathComponent
+            let destination = uniqueDirectory(in: parent, name: base)
+            do {
+                try FileManager.default.createDirectory(at: destination,
+                                                        withIntermediateDirectories: true)
+                try ZipExtractor.extract(file, to: destination)
+            } catch {
+                try? FileManager.default.removeItem(at: destination)
+            }
+        }
+    }
+
+    /// A non-existing folder URL next to the archive, appending " (n)" if needed.
+    private static func uniqueDirectory(in parent: URL, name: String) -> URL {
+        var candidate = parent.appendingPathComponent(name, isDirectory: true)
+        var counter = 1
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = parent.appendingPathComponent("\(name) (\(counter))", isDirectory: true)
+            counter += 1
+        }
+        return candidate
+    }
+
     /// Present the downloaded file for saving / sharing via the Files app.
     ///
     /// Safe to call from the download delegate the instant a transfer finishes:
@@ -259,6 +291,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
             item.state = .done
             item.progress = 1
             item.fileURL = target
+            DownloadManager.autoUnzipIfNeeded(key: key, file: target)
             #if canImport(UIKit)
             // On iOS, once a download finishes, present the Apple share sheet
             // immediately so the user can save / AirDrop the file.

@@ -46,6 +46,13 @@ final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(accelConcurrencyIncludeArtifacts, forKey: "ghSettings.accel.conc.artifacts") }
     }
 
+    // MARK: - Downloads 下载
+
+    /// Actions 产物下载后自动解压（默认开）
+    @Published var autoUnzipArtifacts: Bool {
+        didSet { UserDefaults.standard.set(autoUnzipArtifacts, forKey: "ghSettings.download.autoUnzip") }
+    }
+
     /// Used as a SwiftUI `.id()` to force a full re-render on setting change.
     var themeSignature: String {
         "\(isDarkMode ? "d" : "l")-\(language.rawValue)"
@@ -72,5 +79,8 @@ final class AppSettings: ObservableObject {
         let level = def.integer(forKey: "ghSettings.accel.conc.level")
         accelConcurrencyLevel = level == 0 ? 4 : level
         accelConcurrencyIncludeArtifacts = def.bool(forKey: "ghSettings.accel.conc.artifacts")
+
+        // Defaults to on, so distinguish "unset" from an explicit false.
+        autoUnzipArtifacts = def.object(forKey: "ghSettings.download.autoUnzip") as? Bool ?? true
     }
 }
