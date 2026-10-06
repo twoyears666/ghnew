@@ -218,26 +218,30 @@ private struct RocketShape: Shape {
         func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
             CGPoint(x: rect.minX + x * w, y: rect.minY + y * h)
         }
-        // Hull: domed nose tapering to a flat tail.
-        p.move(to: pt(0.5, 0.02))
-        p.addQuadCurve(to: pt(0.74, 0.52), control: pt(0.76, 0.16))
-        p.addLine(to: pt(0.74, 0.82))
-        p.addLine(to: pt(0.26, 0.82))
-        p.addLine(to: pt(0.26, 0.52))
-        p.addQuadCurve(to: pt(0.5, 0.02), control: pt(0.24, 0.16))
+        // Hull: pointed nose tapering into a straight body.
+        p.move(to: pt(0.50, 0.02))
+        p.addLine(to: pt(0.615, 0.33))
+        p.addLine(to: pt(0.615, 0.72))
+        p.addLine(to: pt(0.385, 0.72))
+        p.addLine(to: pt(0.385, 0.33))
         p.closeSubpath()
-        // Side fins.
-        p.move(to: pt(0.26, 0.50))
-        p.addLine(to: pt(0.06, 0.86))
-        p.addLine(to: pt(0.26, 0.78))
+        // Small swept side fins.
+        p.move(to: pt(0.385, 0.52))
+        p.addLine(to: pt(0.24, 0.76))
+        p.addLine(to: pt(0.385, 0.70))
         p.closeSubpath()
-        p.move(to: pt(0.74, 0.50))
-        p.addLine(to: pt(0.94, 0.86))
-        p.addLine(to: pt(0.74, 0.78))
+        p.move(to: pt(0.615, 0.52))
+        p.addLine(to: pt(0.76, 0.76))
+        p.addLine(to: pt(0.615, 0.70))
         p.closeSubpath()
         // Porthole (even-odd -> hole).
-        p.addEllipse(in: CGRect(x: rect.minX + 0.38 * w, y: rect.minY + 0.34 * h,
-                                width: 0.24 * w, height: 0.24 * h))
+        p.addEllipse(in: CGRect(x: rect.minX + 0.44 * w, y: rect.minY + 0.39 * h,
+                                width: 0.12 * w, height: 0.12 * h))
+        // Exhaust flame.
+        p.move(to: pt(0.44, 0.78))
+        p.addLine(to: pt(0.50, 0.95))
+        p.addLine(to: pt(0.56, 0.78))
+        p.closeSubpath()
         return p
     }
 }

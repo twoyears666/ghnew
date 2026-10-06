@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -10,7 +10,12 @@ import 'package:share_plus/share_plus.dart';
 
 import 'accelerator.dart';
 import 'github_api.dart';
+import 'l10n.dart';
 import 'settings.dart';
+
+/// Root navigator, so a download finishing without a `BuildContext` can still
+/// raise the "open folder" prompt.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 enum DlState { idle, downloading, done, failed, authRequired }
 
@@ -147,7 +152,7 @@ class DownloadManager extends ChangeNotifier {
       item.state = DlState.done;
       item.progress = 1;
       notifyListeners();
-      unawaited(_autoUnzipIfNeeded(item.id, file));
+      unawaited(_finish(item, file));
     } catch (e) {
       item.state = DlState.failed;
       item.error = e.toString();
@@ -280,7 +285,7 @@ class DownloadManager extends ChangeNotifier {
       item.state = DlState.done;
       item.progress = 1;
       notifyListeners();
-      unawaited(_autoUnzipIfNeeded(item.id, target));
+      unawaited(_finish(item, target));
     } catch (e) {
       item.state = DlState.failed;
       item.error = e.toString();
@@ -305,32 +310,110 @@ class DownloadManager extends ChangeNotifier {
   Future<File> _targetFile(Directory dir, DownloadItem item) =>
       _uniqueFile(dir, _desiredFileName(item.id, item.name));
 
-  /// Actions artifacts are zip archives (given a `.zip` suffix on save). When the
-  /// user has auto-unzip on, unpack the archive into a sibling folder. A failure
-  /// simply leaves the original `.zip`.
-  static Future<void> _autoUnzipIfNeeded(String key, File file) async {
-    if (!key.startsWith('act-')) return;
-    if (!SettingsStore.i.autoUnzipArtifacts) return;
-    if (p.extension(file.path).toLowerCase() != '.zip') return;
+  /// Mark a transfer done, then unpack an Actions artifact archive if the user
+  /// has auto-unzip on. A lone payload file is moved next to the archive (so an
+  /// app can open it directly); a multi-file archive becomes a sibling folder
+  /// and the user is asked whether to open it.
+  Future<void> _finish(DownloadItem item, File file) async {
+    final result = await _processArtifact(item.id, file);
+    if (result.file != null) {
+      item.filePath = result.file!.path;
+      notifyListeners();
+    } else if (result.folder != null) {
+      item.filePath = result.folder!.path;
+      notifyListeners();
+      _offerOpenFolder(result.folder!);
+    }
+  }
+
+  /// Outcome of unpacking a downloaded artifact archive.
+  static const _notApplicable = _UnzipResult(null, null);
+
+  /// Unpack `file`; a failure simply leaves the original `.zip`.
+  static Future<_UnzipResult> _processArtifact(String key, File file) async {
+    if (!key.startsWith('act-')) return _notApplicable;
+    if (!SettingsStore.i.autoUnzipArtifacts) return _notApplicable;
+    if (p.extension(file.path).toLowerCase() != '.zip') return _notApplicable;
+
     final parent = file.parent;
     final base = p.basenameWithoutExtension(file.path);
-    final dest = await _uniqueDirectory(parent, base);
+    // Extract into a hidden staging folder first so the payload can be counted
+    // before deciding between a single file and a folder.
+    final staging = Directory(p.join(
+        parent.path, '.ghnew-unzip-${DateTime.now().microsecondsSinceEpoch}'));
     try {
-      await dest.create(recursive: true);
+      await staging.create(recursive: true);
       final archive = ZipDecoder().decodeBytes(await file.readAsBytes());
+      final written = <String>[];
       for (final entry in archive.files) {
         if (!entry.isFile) continue;
         final name = _sanitize(entry.name);
-        if (name.isEmpty) continue;
-        final out = File(p.join(dest.path, name));
+        if (name.isEmpty || name.contains('__MACOSX')) continue;
+        final out = File(p.join(staging.path, name));
         await out.create(recursive: true);
         await out.writeAsBytes(entry.content as List<int>);
+        written.add(name);
       }
+
+      if (written.length == 1) {
+        final only = File(p.join(staging.path, written.first));
+        final dest = await _uniqueFile(parent, p.basename(written.first));
+        try {
+          await only.rename(dest.path);
+          await staging.delete(recursive: true);
+          return _UnzipResult(dest, null);
+        } catch (_) {
+          // Moving the lone file failed; keep the whole folder instead.
+        }
+      }
+      final dest = await _uniqueDirectory(parent, base);
+      await staging.rename(dest.path);
+      return _UnzipResult(null, dest);
     } catch (_) {
       try {
-        await dest.delete(recursive: true);
+        await staging.delete(recursive: true);
       } catch (_) {}
+      return _notApplicable;
     }
+  }
+
+  /// Ask whether to open the folder a multi-file artifact was unpacked into.
+  static void _offerOpenFolder(Directory dir) {
+    final ctx = appNavigatorKey.currentContext;
+    if (ctx == null) return;
+    showDialog<void>(
+      context: ctx,
+      builder: (dctx) => AlertDialog(
+        title: Text(L.str('unzipDoneTitle')),
+        content: Text('${L.str('unzipFolderMessage')}\n\n${dir.path}'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dctx),
+              child: Text(L.str('cancel'))),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(dctx);
+              _openFolder(dir.path);
+            },
+            child: Text(L.str('openFolder')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Reveal a folder in the OS file manager. Android/iOS expose no generic
+  /// folder viewer, so the dialog's path text is all those platforms get.
+  static Future<void> _openFolder(String path) async {
+    try {
+      if (Platform.isWindows) {
+        await Process.run('explorer', [path]);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', [path]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [path]);
+      }
+    } catch (_) {}
   }
 
   /// Drop `.`/`..` components so a crafted entry can never escape `dest`.
@@ -350,7 +433,7 @@ class DownloadManager extends ChangeNotifier {
   }
 
   /// Never clobber an existing file: append " (n)" until the name is free.
-  Future<File> _uniqueFile(Directory dir, String fileName) async {
+  static Future<File> _uniqueFile(Directory dir, String fileName) async {
     final ext = p.extension(fileName);
     final base = p.basenameWithoutExtension(fileName);
     var target = p.join(dir.path, fileName);
@@ -361,13 +444,18 @@ class DownloadManager extends ChangeNotifier {
     return File(target);
   }
 
+  /// Present a finished download: open a folder, or share a file so an installed
+  /// app can open it.
   Future<void> reveal(DownloadItem item) async {
     final path = item.filePath;
     if (path == null) return;
+    if (await Directory(path).exists()) {
+      await _openFolder(path);
+      return;
+    }
     final f = File(path);
     if (!await f.exists()) return;
-    final x = XFile(path);
-    await Share.shareXFiles([x]);
+    await Share.shareXFiles([XFile(path)]);
   }
 
   static String bytesString(int? bytes) {
@@ -379,4 +467,11 @@ class DownloadManager extends ChangeNotifier {
     if (mb < 1024) return '${mb.toStringAsFixed(1)} MB';
     return '${(mb / 1024).toStringAsFixed(2)} GB';
   }
+}
+
+/// A single payload file, a sibling folder of several, or nothing to unpack.
+class _UnzipResult {
+  final File? file;
+  final Directory? folder;
+  const _UnzipResult(this.file, this.folder);
 }

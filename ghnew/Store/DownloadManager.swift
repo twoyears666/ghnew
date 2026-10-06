@@ -66,13 +66,7 @@ final class DownloadManager: NSObject, ObservableObject {
         chunked.onFinish = { [weak self] key, url, error in
             guard let self, let item = self.items[key] else { return }
             if let url {
-                item.state = .done
-                item.progress = 1
-                item.fileURL = url
-                DownloadManager.autoUnzipIfNeeded(key: key, file: url)
-                #if canImport(UIKit)
-                self.reveal(item)
-                #endif
+                self.finish(item: item, key: key, file: url)
             } else {
                 item.state = .failed(error?.localizedDescription ?? "Download failed.")
             }
@@ -182,24 +176,101 @@ final class DownloadManager: NSObject, ObservableObject {
         return target
     }
 
-    /// Actions artifacts are zip archives (given a `.zip` suffix on save). When
-    /// the user has auto-unzip on, unpack the archive into a sibling folder.
-    /// Runs off the main thread; a failure simply leaves the original `.zip`.
-    private static func autoUnzipIfNeeded(key: String, file: URL) {
+    /// Mark a transfer done, then unpack an Actions artifact archive if the user
+    /// has auto-unzip on and surface the result: a lone payload file is placed
+    /// next to the archive and revealed (so an app can open it), while a
+    /// multi-file archive becomes a sibling folder and the user is offered the
+    /// Files app.
+    private func finish(item: DownloadItem, key: String, file: URL) {
+        item.state = .done
+        item.progress = 1
+        item.fileURL = file
+        DownloadManager.processArtifact(key: key, file: file) { result in
+            switch result {
+            case .singleFile(let url), .folder(let url):
+                item.fileURL = url
+            case .notApplicable:
+                break
+            }
+            switch result {
+            case .folder(let url):
+                #if canImport(UIKit)
+                DownloadManager.offerFilesApp(url)
+                #else
+                DownloadManager.revealFile(url)
+                #endif
+            case .singleFile(let url):
+                DownloadManager.revealFile(url)
+            case .notApplicable:
+                DownloadManager.revealFile(file)
+            }
+        }
+    }
+
+    /// Outcome of unpacking a downloaded artifact archive.
+    private enum UnzipResult {
+        case notApplicable          // not an artifact zip, or the feature is off
+        case singleFile(URL)        // one payload -> the file itself, beside the zip
+        case folder(URL)            // several payloads -> a sibling folder
+    }
+
+    /// Unpack `file` off the main thread; a failure simply leaves the `.zip`.
+    private static func processArtifact(key: String, file: URL,
+                                        completion: @escaping (UnzipResult) -> Void) {
         guard key.hasPrefix("act-"), AppSettings.shared.autoUnzipArtifacts,
-              file.pathExtension.lowercased() == "zip" else { return }
+              file.pathExtension.lowercased() == "zip" else {
+            completion(.notApplicable)
+            return
+        }
         DispatchQueue.global(qos: .utility).async {
             let parent = file.deletingLastPathComponent()
             let base = file.deletingPathExtension().lastPathComponent
-            let destination = uniqueDirectory(in: parent, name: base)
+            // Extract into a hidden staging folder first so the payload can be
+            // counted before deciding between a single file and a folder.
+            let staging = parent.appendingPathComponent(".ghnew-unzip-\(UUID().uuidString)",
+                                                        isDirectory: true)
+            func finish(_ result: UnzipResult) {
+                DispatchQueue.main.async { completion(result) }
+            }
             do {
-                try FileManager.default.createDirectory(at: destination,
+                try FileManager.default.createDirectory(at: staging,
                                                         withIntermediateDirectories: true)
-                try ZipExtractor.extract(file, to: destination)
+                try ZipExtractor.extract(file, to: staging)
+
+                let files = regularFiles(in: staging)
+                if files.count == 1, let only = files.first {
+                    let destination = uniqueURL(in: parent, fileName: only.lastPathComponent)
+                    if (try? FileManager.default.moveItem(at: only, to: destination)) != nil {
+                        try? FileManager.default.removeItem(at: staging)
+                        finish(.singleFile(destination))
+                        return
+                    }
+                    // Moving the lone file failed; keep the whole folder instead.
+                }
+                let destination = uniqueDirectory(in: parent, name: base)
+                try FileManager.default.moveItem(at: staging, to: destination)
+                finish(.folder(destination))
             } catch {
-                try? FileManager.default.removeItem(at: destination)
+                try? FileManager.default.removeItem(at: staging)
+                finish(.notApplicable)
             }
         }
+    }
+
+    /// Every regular file below `directory`, recursively, ignoring macOS metadata.
+    private static func regularFiles(in directory: URL) -> [URL] {
+        guard let walker = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]) else { return [] }
+        var files: [URL] = []
+        for case let url as URL in walker {
+            if url.pathComponents.contains("__MACOSX") { continue }
+            if (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true {
+                files.append(url)
+            }
+        }
+        return files
     }
 
     /// A non-existing folder URL next to the archive, appending " (n)" if needed.
@@ -213,22 +284,30 @@ final class DownloadManager: NSObject, ObservableObject {
         return candidate
     }
 
-    /// Present the downloaded file for saving / sharing via the Files app.
-    ///
-    /// Safe to call from the download delegate the instant a transfer finishes:
-    /// the presentation is deferred to the next runloop turn (never inside the
-    /// URLSession callback), and on iPad the activity controller gets a popover
-    /// anchor — presenting it without one raises an exception and crashes.
+    /// Re-present a finished download's output (used by the "已下载" button).
     func reveal(_ item: DownloadItem) {
         guard let url = item.fileURL else { return }
+        DownloadManager.revealFile(url)
+    }
+
+    /// Present `url` for saving / sharing via the Files app (iOS) or show it in
+    /// Finder (macOS). A directory is handed to the Files app, since the share
+    /// sheet cannot carry a folder.
+    ///
+    /// Safe to call the instant a transfer finishes: presentation is deferred to
+    /// the next runloop turn (never inside the URLSession callback), and on iPad
+    /// the activity controller gets a popover anchor — presenting it without one
+    /// raises an exception and crashes.
+    static func revealFile(_ url: URL) {
+        var isDirectory: ObjCBool = false
+        FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
         #if canImport(UIKit)
+        if isDirectory.boolValue {
+            openFilesApp()
+            return
+        }
         DispatchQueue.main.async {
-            guard let scene = UIApplication.shared.connectedScenes
-                    .compactMap({ $0 as? UIWindowScene })
-                    .first(where: { $0.activationState == .foregroundActive }),
-                  let window = scene.windows.first(where: { $0.isKeyWindow }),
-                  let presenter = DownloadManager.topmostPresentable(window.rootViewController)
-            else { return }
+            guard let presenter = DownloadManager.topmostPresenter() else { return }
             let activity = UIActivityViewController(activityItems: [url], applicationActivities: nil)
             // iPad presents this modally as a popover; it must have an anchor.
             if let popover = activity.popoverPresentationController {
@@ -246,6 +325,39 @@ final class DownloadManager: NSObject, ObservableObject {
     }
 
     #if canImport(UIKit)
+    /// Ask whether to open the Files app to browse a just-unpacked folder.
+    static func offerFilesApp(_ folder: URL) {
+        DispatchQueue.main.async {
+            guard let presenter = DownloadManager.topmostPresenter() else { return }
+            let alert = UIAlertController(title: Localization.L("unzipDoneTitle"),
+                                          message: Localization.L("unzipFolderMessage"),
+                                          preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: Localization.L("openFilesApp"),
+                                          style: .default) { _ in
+                DownloadManager.openFilesApp()
+            })
+            alert.addAction(UIAlertAction(title: Localization.L("cancel"), style: .cancel))
+            presenter.present(alert, animated: true)
+        }
+    }
+
+    /// Open the Files app. iOS has no deep link to an arbitrary sub-folder, but
+    /// the app's Documents are browsable because `UIFileSharingEnabled` is set.
+    static func openFilesApp() {
+        guard let url = URL(string: "shareddocuments://") else { return }
+        UIApplication.shared.open(url)
+    }
+
+    /// The on-screen controller to present from, or nil if there is none.
+    private static func topmostPresenter() -> UIViewController? {
+        guard let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive }),
+              let window = scene.windows.first(where: { $0.isKeyWindow })
+        else { return nil }
+        return topmostPresentable(window.rootViewController)
+    }
+
     /// Walk to the deepest presented controller and only return it if its view is
     /// actually on screen, so we never present on a detached controller.
     private static func topmostPresentable(_ root: UIViewController?) -> UIViewController? {
@@ -288,15 +400,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
             in: dir, fileName: DownloadManager.desiredFileName(key: key, name: item.name))
         do {
             try FileManager.default.moveItem(at: location, to: target)
-            item.state = .done
-            item.progress = 1
-            item.fileURL = target
-            DownloadManager.autoUnzipIfNeeded(key: key, file: target)
-            #if canImport(UIKit)
-            // On iOS, once a download finishes, present the Apple share sheet
-            // immediately so the user can save / AirDrop the file.
-            reveal(item)
-            #endif
+            finish(item: item, key: key, file: target)
         } catch {
             item.state = .failed(error.localizedDescription)
         }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'app_store.dart';
 import 'content_view.dart';
+import 'download_manager.dart';
 import 'settings.dart';
 import 'theme.dart';
 
@@ -74,6 +75,7 @@ class _GhnewAppState extends State<GhnewApp> {
         return MaterialApp(
           title: 'ghnew',
           debugShowCheckedModeBanner: false,
+          navigatorKey: appNavigatorKey,
           theme: buildAppTheme(),
           darkTheme: buildAppTheme(),
           themeMode: SettingsStore.i.isDark ? ThemeMode.dark : ThemeMode.light,

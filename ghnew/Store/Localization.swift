@@ -101,7 +101,10 @@ enum Localization {
         // Downloads 下载
         "downloadSection": ("下载", "Downloads"),
         "autoUnzip": ("自动解压 Actions 产物", "Auto-unzip actions artifacts"),
-        "autoUnzipHint": ("产物均为 zip 压缩包，下载完成后自动解压到同名文件夹（原 zip 保留）。", "Artifacts are zip archives; unpack them into a like-named folder after download (the zip is kept).")
+        "autoUnzipHint": ("产物均为 zip 压缩包，下载完成后自动解压到同名文件夹（原 zip 保留）。", "Artifacts are zip archives; unpack them into a like-named folder after download (the zip is kept)."),
+        "unzipDoneTitle": ("解压完成", "Unpacked"),
+        "unzipFolderMessage": ("该产物包含多个文件，已解压到同名文件夹。是否打开“文件”App 查看？", "This artifact holds several files and was unpacked into a folder. Open the Files app to view it?"),
+        "openFilesApp": ("打开“文件”App", "Open Files app")
     ]
 
     static func L(_ key: String) -> String {
