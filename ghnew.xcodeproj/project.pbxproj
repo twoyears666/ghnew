@@ -31,6 +31,9 @@
 		200000000000000000000005 /* SettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000005 /* SettingsSheet.swift */; };
 		200000000000000000000006 /* RepoSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000006 /* RepoSettingsSheet.swift */; };
 		200000000000000000000007 /* AddReposSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000007 /* AddReposSheet.swift */; };
+		200000000000000000000008 /* Accelerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000009 /* Accelerator.swift */; };
+		200000000000000000000009 /* ChunkedDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000A /* ChunkedDownloader.swift */; };
+		20000000000000000000000A /* AccelerationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000B /* AccelerationView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -60,6 +63,9 @@
 		100000000000000000000006 /* RepoSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoSettingsSheet.swift; sourceTree = "<group>"; };
 		100000000000000000000007 /* AddReposSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddReposSheet.swift; sourceTree = "<group>"; };
 		100000000000000000000008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		100000000000000000000009 /* Accelerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Accelerator.swift; sourceTree = "<group>"; };
+		10000000000000000000000A /* ChunkedDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChunkedDownloader.swift; sourceTree = "<group>"; };
+		10000000000000000000000B /* AccelerationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccelerationView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -114,6 +120,7 @@
 			isa = PBXGroup;
 			children = (
 				70B71B0A274F6C72B71C7087 /* GitHubAPI.swift */,
+				100000000000000000000009 /* Accelerator.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -122,6 +129,7 @@
 			isa = PBXGroup;
 			children = (
 				4D73F0C86D87104F50811D89 /* ActionCard.swift */,
+				10000000000000000000000B /* AccelerationView.swift */,
 				FFF58866DAB6BD559C24BC0D /* AddRepoSheet.swift */,
 				100000000000000000000007 /* AddReposSheet.swift */,
 				F522312700E10DCCB5E90E94 /* Components.swift */,
@@ -142,6 +150,7 @@
 			children = (
 				1138ECF0DB54915F9655E4E6 /* AppStore.swift */,
 				100000000000000000000001 /* AppSettings.swift */,
+				10000000000000000000000A /* ChunkedDownloader.swift */,
 				100000000000000000000004 /* DownloadManager.swift */,
 				100000000000000000000002 /* Localization.swift */,
 				EEC73FE4370D5E97AF415B01 /* Persistence.swift */,
@@ -229,10 +238,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				8674880DFE3AA6E47CD40DB4 /* ActionCard.swift in Sources */,
+				20000000000000000000000A /* AccelerationView.swift in Sources */,
+				200000000000000000000008 /* Accelerator.swift in Sources */,
 				200000000000000000000007 /* AddReposSheet.swift in Sources */,
 				D1A860FFE33DBCB835262188 /* AddRepoSheet.swift in Sources */,
 				200000000000000000000001 /* AppSettings.swift in Sources */,
 				0D4280D48E529B6C66C10CBF /* AppStore.swift in Sources */,
+				200000000000000000000009 /* ChunkedDownloader.swift in Sources */,
 				53AAC98856E2D82679D18199 /* Components.swift in Sources */,
 				ECA6F8F08E125E47B6150AA5 /* ContentView.swift in Sources */,
 				200000000000000000000004 /* DownloadManager.swift in Sources */,

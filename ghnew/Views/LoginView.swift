@@ -23,6 +23,7 @@ struct LoginFooter: View {
     @EnvironmentObject var settings: AppSettings
     @State private var showLogin = false
     @State private var showSettings = false
+    @State private var showAccel = false
     @State private var showSignOutPrompt = false
     @State private var showSignOutConfirm = false
 
@@ -61,6 +62,13 @@ struct LoginFooter: View {
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 Button {
+                    showAccel = true
+                } label: {
+                    Text("🚀")
+                        .font(.system(size: 15))
+                }
+                .buttonStyle(.plain)
+                Button {
                     showSettings = true
                 } label: {
                     Image(systemName: "gearshape.fill")
@@ -81,6 +89,7 @@ struct LoginFooter: View {
         }
         .sheet(isPresented: $showLogin) { LoginSheet().environmentObject(store) }
         .sheet(isPresented: $showSettings) { SettingsSheet().environmentObject(store) }
+        .fullScreenCover(isPresented: $showAccel) { AccelerationView() }
         .sheet(isPresented: $store.showRepoPicker) { AddReposSheet().environmentObject(store) }
         .confirmationDialog(Localization.L("signOutTitle"), isPresented: $showSignOutPrompt, titleVisibility: .visible) {
             Button(Localization.L("logOut"), role: .destructive) {

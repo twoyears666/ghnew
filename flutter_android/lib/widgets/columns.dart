@@ -8,6 +8,7 @@ import '../l10n.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../util.dart';
+import 'acceleration_view.dart';
 import 'components.dart';
 import 'markdown_view.dart';
 import 'sheets.dart';
@@ -43,7 +44,11 @@ class LeftColumn extends StatelessWidget {
               ),
             ),
             Divider(height: 1, color: T.border),
-            _LoginFooter(onSettings: () => showSettings(context), onLogin: () => showLogin(context)),
+            _LoginFooter(
+              onSettings: () => showSettings(context),
+              onLogin: () => showLogin(context),
+              onAccel: () => showAcceleration(context),
+            ),
           ],
         ),
       ),
@@ -147,9 +152,11 @@ class _AddRepoRow extends StatelessWidget {
 }
 
 class _LoginFooter extends StatelessWidget {
-  const _LoginFooter({required this.onSettings, required this.onLogin});
+  const _LoginFooter(
+      {required this.onSettings, required this.onLogin, required this.onAccel});
   final VoidCallback onSettings;
   final VoidCallback onLogin;
+  final VoidCallback onAccel;
 
   @override
   Widget build(BuildContext context) {
@@ -172,6 +179,11 @@ class _LoginFooter extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: T.text),
               ),
+            ),
+            IconButton(
+              onPressed: onAccel,
+              icon: const Text('🚀', style: TextStyle(fontSize: 15)),
+              visualDensity: VisualDensity.compact,
             ),
             IconButton(
               onPressed: onSettings,

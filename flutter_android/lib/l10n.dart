@@ -69,6 +69,26 @@ class L {
     'changelog': ('更新日志', 'Changelog'),
     'noBody': ('无说明', 'No description'),
     'selectReleaseOrRun': ('点击一条 Release 或 Run 查看详情', 'Select a release or run to inspect it'),
+
+    // Acceleration
+    'accelerate': ('加速', 'Accelerate'),
+    'relayTab': ('中转（推荐）', 'Relay (recommended)'),
+    'concTab': ('并发（容易限流）', 'Concurrency (rate-limit)'),
+    'masterSwitch': ('总开关', 'Master switch'),
+    'relayNodes': ('节点', 'Nodes'),
+    'testLatency': ('测试节点延迟', 'Test node latency'),
+    'latencyFast': ('快速', 'Fast'),
+    'latencyMedium': ('中等', 'Medium'),
+    'latencySlow': ('慢速', 'Slow'),
+    'latencyFail': ('失败', 'Failed'),
+    'includeArtifacts': ('同时加速 Actions 产物', 'Also accelerate actions artifacts'),
+    'artifactRiskWarn': ('产物下载需要鉴权，走第三方中转可能失败，并会向节点暴露你的令牌，请谨慎开启。',
+        'Artifacts require auth; a third-party relay may fail and exposes your token to the node. Enable with caution.'),
+    'concLevel': ('并发数', 'Concurrency'),
+    'relayHint': ('开启后，公开的 Release 资源将通过所选镜像节点下载。',
+        'When on, public release assets download through the selected mirror.'),
+    'concHint': ('将单个文件切成多段并行下载以提速；连接数过多容易触发限流，探测到不支持时自动回退单线程。',
+        'Splits a single file into parallel chunks for speed; too many connections may hit rate limits and it falls back to single-thread when unsupported.'),
   };
 
   static String str(String key) {

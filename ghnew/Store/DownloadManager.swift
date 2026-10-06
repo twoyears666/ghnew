@@ -52,12 +52,30 @@ final class DownloadManager: NSObject, ObservableObject {
     private var taskKeys: [Int: String] = [:]   // URLSessionTask.identifier -> item id
 
     private let api = GitHubAPI.shared
+    private let chunked = ChunkedDownloader()
 
     override init() {
         super.init()
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 120
         session = URLSession(configuration: config, delegate: self, delegateQueue: .main)
+
+        chunked.onProgress = { [weak self] key, progress in
+            self?.items[key]?.progress = progress
+        }
+        chunked.onFinish = { [weak self] key, url, error in
+            guard let self, let item = self.items[key] else { return }
+            if let url {
+                item.state = .done
+                item.progress = 1
+                item.fileURL = url
+                #if canImport(UIKit)
+                self.reveal(item)
+                #endif
+            } else {
+                item.state = .failed(error?.localizedDescription ?? "Download failed.")
+            }
+        }
     }
 
     func item(for key: String) -> DownloadItem? { items[key] }
@@ -65,17 +83,33 @@ final class DownloadManager: NSObject, ObservableObject {
     /// Start a download. If `needsAuth` is true but no token is set, the item is
     /// marked `.authRequired` and nothing is downloaded (caller shows a login hint).
     func download(key: String, name: String, size: Int64?, url: URL, needsAuth: Bool) {
+        var token: String?
         if needsAuth {
-            guard let token = api.token, !token.isEmpty else {
+            guard let t = api.token, !t.isEmpty else {
                 let item = DownloadItem(id: key, name: name, size: size, url: url, needsAuth: needsAuth)
                 item.state = .authRequired
                 items[key] = item
                 return
             }
-            start(key: key, name: name, size: size, url: url, token: token)
-            return
+            token = t
         }
-        start(key: key, name: name, size: size, url: url, token: nil)
+
+        let isArtifact = key.hasPrefix("act-")
+        let settings = AppSettings.shared
+
+        // 中转: route the request through the selected mirror node.
+        var effective = url
+        if settings.accelRelayEnabled, !isArtifact || settings.accelRelayIncludeArtifacts,
+           let rewritten = Accelerator.rewrite(url, host: settings.accelRelayNode) {
+            effective = rewritten
+        }
+
+        // 并发: multi-connection byte-range download.
+        if settings.accelConcurrencyEnabled, !isArtifact || settings.accelConcurrencyIncludeArtifacts {
+            startChunked(key: key, name: name, size: size, url: effective, token: token)
+        } else {
+            start(key: key, name: name, size: size, url: effective, token: token)
+        }
     }
 
     /// Re-run a previously failed download.
@@ -96,6 +130,55 @@ final class DownloadManager: NSObject, ObservableObject {
         let task = session.downloadTask(with: req)
         taskKeys[task.taskIdentifier] = key
         task.resume()
+    }
+
+    /// Probe the effective URL, then start a chunked download — falling back to a
+    /// plain single-thread download when the file is small or ranges are unsupported.
+    private func startChunked(key: String, name: String, size: Int64?, url: URL, token: String?) {
+        let level = max(2, min(8, AppSettings.shared.accelConcurrencyLevel))
+        Task { [weak self] in
+            guard let self else { return }
+            let total = await self.chunked.probeTotal(url: url, token: token)
+            DispatchQueue.main.async {
+                guard let total, total > ChunkedDownloader.threshold else {
+                    self.start(key: key, name: name, size: size, url: url, token: token)
+                    return
+                }
+                let dir = Persistence.documentsDirectory.appendingPathComponent("Downloads")
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let target = DownloadManager.uniqueURL(
+                    in: dir, fileName: DownloadManager.desiredFileName(key: key, name: name))
+                let item = DownloadItem(id: key, name: name, size: total, url: url, needsAuth: token != nil)
+                item.state = .downloading
+                self.items[key] = item
+                self.chunked.start(key: key, url: url, token: token,
+                                   total: total, level: level, target: target)
+            }
+        }
+    }
+
+    /// Final on-disk name. Actions artifacts are zip archives whose GitHub name
+    /// carries no extension, so add one.
+    private static func desiredFileName(key: String, name: String) -> String {
+        let safeName = name.replacingOccurrences(of: "/", with: "_")
+        if key.hasPrefix("act-"), (safeName as NSString).pathExtension.isEmpty {
+            return safeName + ".zip"
+        }
+        return safeName
+    }
+
+    /// Never clobber an existing file: append " (n)" until the name is free.
+    private static func uniqueURL(in dir: URL, fileName: String) -> URL {
+        var target = dir.appendingPathComponent(fileName)
+        var counter = 1
+        while FileManager.default.fileExists(atPath: target.path) {
+            let ext = target.pathExtension
+            let base = (target.lastPathComponent as NSString).deletingPathExtension
+            let newName = "\(base) (\(counter))" + (ext.isEmpty ? "" : ".\(ext)")
+            target = dir.appendingPathComponent(newName)
+            counter += 1
+        }
+        return target
     }
 
     /// Present the downloaded file for saving / sharing via the Files app.
@@ -169,24 +252,8 @@ extension DownloadManager: URLSessionDownloadDelegate {
         guard let item = items[key] else { return }
         let dir = Persistence.documentsDirectory.appendingPathComponent("Downloads")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let safeName = item.name.replacingOccurrences(of: "/", with: "_")
-        // Actions artifacts are always served as zip archives, and GitHub's
-        // artifact name carries no extension — add one so the saved file keeps it.
-        let fileName: String
-        if key.hasPrefix("act-"), (safeName as NSString).pathExtension.isEmpty {
-            fileName = safeName + ".zip"
-        } else {
-            fileName = safeName
-        }
-        var target = dir.appendingPathComponent(fileName)
-        var counter = 1
-        while FileManager.default.fileExists(atPath: target.path) {
-            let ext = target.pathExtension
-            let base = (target.lastPathComponent as NSString).deletingPathExtension
-            let newName = "\(base) (\(counter))" + (ext.isEmpty ? "" : ".\(ext)")
-            target = dir.appendingPathComponent(newName)
-            counter += 1
-        }
+        let target = DownloadManager.uniqueURL(
+            in: dir, fileName: DownloadManager.desiredFileName(key: key, name: item.name))
         do {
             try FileManager.default.moveItem(at: location, to: target)
             item.state = .done
