@@ -89,7 +89,13 @@ struct LoginFooter: View {
         }
         .sheet(isPresented: $showLogin) { LoginSheet().environmentObject(store) }
         .sheet(isPresented: $showSettings) { SettingsSheet().environmentObject(store) }
+        #if os(iOS)
+        // A standalone, full-screen page on iOS (not a floating overlay).
         .fullScreenCover(isPresented: $showAccel) { AccelerationView() }
+        #else
+        // fullScreenCover is unavailable on macOS; a sheet is the platform norm.
+        .sheet(isPresented: $showAccel) { AccelerationView() }
+        #endif
         .sheet(isPresented: $store.showRepoPicker) { AddReposSheet().environmentObject(store) }
         .confirmationDialog(Localization.L("signOutTitle"), isPresented: $showSignOutPrompt, titleVisibility: .visible) {
             Button(Localization.L("logOut"), role: .destructive) {
