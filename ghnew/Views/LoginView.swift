@@ -64,8 +64,7 @@ struct LoginFooter: View {
                 Button {
                     showAccel = true
                 } label: {
-                    Text("🚀")
-                        .font(.system(size: 15))
+                    RocketGlyph(size: 16, color: Theme.textSecondary)
                 }
                 .buttonStyle(.plain)
                 Button {
@@ -195,5 +194,50 @@ struct LoginSheet: View {
                 working = false
             }
         }
+    }
+}
+
+/// Vector rocket glyph for the acceleration entry. SF Symbols ships no rocket,
+/// so it is drawn as a shape: a single tint, with the porthole punched out via
+/// the even-odd fill rule.
+struct RocketGlyph: View {
+    var size: CGFloat = 16
+    var color: Color = Theme.textSecondary
+
+    var body: some View {
+        RocketShape()
+            .fill(color, style: FillStyle(eoFill: true))
+            .frame(width: size, height: size)
+    }
+}
+
+private struct RocketShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let w = rect.width, h = rect.height
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: rect.minX + x * w, y: rect.minY + y * h)
+        }
+        // Hull: domed nose tapering to a flat tail.
+        p.move(to: pt(0.5, 0.02))
+        p.addQuadCurve(to: pt(0.74, 0.52), control: pt(0.76, 0.16))
+        p.addLine(to: pt(0.74, 0.82))
+        p.addLine(to: pt(0.26, 0.82))
+        p.addLine(to: pt(0.26, 0.52))
+        p.addQuadCurve(to: pt(0.5, 0.02), control: pt(0.24, 0.16))
+        p.closeSubpath()
+        // Side fins.
+        p.move(to: pt(0.26, 0.50))
+        p.addLine(to: pt(0.06, 0.86))
+        p.addLine(to: pt(0.26, 0.78))
+        p.closeSubpath()
+        p.move(to: pt(0.74, 0.50))
+        p.addLine(to: pt(0.94, 0.86))
+        p.addLine(to: pt(0.74, 0.78))
+        p.closeSubpath()
+        // Porthole (even-odd -> hole).
+        p.addEllipse(in: CGRect(x: rect.minX + 0.38 * w, y: rect.minY + 0.34 * h,
+                                width: 0.24 * w, height: 0.24 * h))
+        return p
     }
 }

@@ -38,7 +38,11 @@ enum Accelerator {
         RelayNode(host: "gitproxy.click"),
         RelayNode(host: "ghproxy.link"),
         RelayNode(host: "iacc.eu.org"),
-        RelayNode(host: "gh.jasonzeng.dev")
+        RelayNode(host: "gh.jasonzeng.dev"),
+        RelayNode(host: "gh-proxy.org"),
+        RelayNode(host: "hk.gh-proxy.org"),
+        RelayNode(host: "cdn.gh-proxy.org"),
+        RelayNode(host: "edgeone.gh-proxy.org")
     ]
 
     static let defaultNodeHost = "gh-proxy.com"

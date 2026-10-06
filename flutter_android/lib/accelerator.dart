@@ -51,6 +51,10 @@ class Accelerator {
     RelayNode('ghproxy.link'),
     RelayNode('iacc.eu.org'),
     RelayNode('gh.jasonzeng.dev'),
+    RelayNode('gh-proxy.org'),
+    RelayNode('hk.gh-proxy.org'),
+    RelayNode('cdn.gh-proxy.org'),
+    RelayNode('edgeone.gh-proxy.org'),
   ];
 
   static const defaultNodeHost = 'gh-proxy.com';

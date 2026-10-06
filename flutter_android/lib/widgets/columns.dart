@@ -182,7 +182,7 @@ class _LoginFooter extends StatelessWidget {
             ),
             IconButton(
               onPressed: onAccel,
-              icon: const Text('🚀', style: TextStyle(fontSize: 15)),
+              icon: Icon(Icons.rocket_launch, size: 18, color: T.text2),
               visualDensity: VisualDensity.compact,
             ),
             IconButton(
