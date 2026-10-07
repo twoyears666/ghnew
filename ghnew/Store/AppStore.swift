@@ -48,7 +48,7 @@ final class AppStore: ObservableObject {
     }
 
     init() {
-        repos = Persistence.loadRepos()
+        repos = AppStore.pinnedFirst(Persistence.loadRepos())
         messages = Persistence.loadMessages().sorted { $0.createdAt > $1.createdAt }
         currentUser = Persistence.loadUser()
         if repos.first(where: { $0.id == selectedRepoID }) == nil {
@@ -143,6 +143,43 @@ final class AppStore: ObservableObject {
         guard let idx = repos.firstIndex(where: { $0.id == repo.id }) else { return }
         repos[idx] = repo
         Persistence.saveRepos(repos)
+    }
+
+    /// Star / unstar a repo (long-press menu). A newly pinned repo joins the end
+    /// of the pinned block; an unpinned one jumps to the top of the normal block.
+    func togglePinned(_ id: String) {
+        guard let idx = repos.firstIndex(where: { $0.id == id }) else { return }
+        var repo = repos.remove(at: idx)
+        repo.pinned.toggle()
+        let boundary = repos.firstIndex { !$0.pinned } ?? repos.count
+        repos.insert(repo, at: boundary)
+        Persistence.saveRepos(repos)
+    }
+
+    /// Apply a drag-reorder: `pinned` / `normal` are repo ids in their new order,
+    /// and their group membership is derived from which list they arrived in.
+    func applyRepoOrder(pinned: [String], normal: [String]) {
+        let byID = Dictionary(uniqueKeysWithValues: repos.map { ($0.id, $0) })
+        var out: [TrackedRepo] = []
+        for id in pinned {
+            guard var repo = byID[id] else { continue }
+            repo.pinned = true
+            out.append(repo)
+        }
+        for id in normal {
+            guard var repo = byID[id] else { continue }
+            repo.pinned = false
+            out.append(repo)
+        }
+        // Safety: never drop a repo through a bad index mapping.
+        guard out.count == repos.count else { return }
+        repos = out
+        Persistence.saveRepos(repos)
+    }
+
+    /// Stable partition: pinned repos first, preserving relative order.
+    private static func pinnedFirst(_ repos: [TrackedRepo]) -> [TrackedRepo] {
+        repos.filter { $0.pinned } + repos.filter { !$0.pinned }
     }
 
     /// Prefill and open the add-repo sheet for the given owner/name.

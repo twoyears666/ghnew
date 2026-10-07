@@ -9,6 +9,7 @@ class TrackedRepo {
   bool watchRelease;
   bool watchAction;
   bool notify;
+  bool pinned;
   String? defaultBranch;
   int? lastSeenRelease;
   int? lastSeenRun;
@@ -22,6 +23,7 @@ class TrackedRepo {
     this.watchRelease = true,
     this.watchAction = true,
     this.notify = true,
+    this.pinned = false,
     this.defaultBranch,
     this.lastSeenRelease,
     this.lastSeenRun,
@@ -34,6 +36,7 @@ class TrackedRepo {
         watchRelease: j['watchRelease'] as bool? ?? true,
         watchAction: j['watchAction'] as bool? ?? true,
         notify: j['notify'] as bool? ?? true,
+        pinned: j['pinned'] as bool? ?? false,
         defaultBranch: j['defaultBranch'] as String?,
         lastSeenRelease: j['lastSeenRelease'] as int?,
         lastSeenRun: j['lastSeenRun'] as int?,
@@ -48,6 +51,7 @@ class TrackedRepo {
         'watchRelease': watchRelease,
         'watchAction': watchAction,
         'notify': notify,
+        'pinned': pinned,
         'defaultBranch': defaultBranch,
         'lastSeenRelease': lastSeenRelease,
         'lastSeenRun': lastSeenRun,

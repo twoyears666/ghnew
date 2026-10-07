@@ -10,28 +10,31 @@ struct TrackedRepo: Codable, Identifiable, Equatable {
     var watchAction: Bool
     /// Whether new releases/actions should post a Notification Center banner.
     var notify: Bool
+    /// Whether the repo is starred to the "pinned" group at the top of the list.
+    var pinned: Bool
     var defaultBranch: String?
     var lastSeenRelease: Int?   // highest GitHub release id already recorded
     var lastSeenRun: Int?       // highest workflow run id already recorded
     var addedAt: Date
 
     init(owner: String, name: String, watchRelease: Bool, watchAction: Bool,
-         notify: Bool = true, defaultBranch: String? = nil,
+         notify: Bool = true, pinned: Bool = false, defaultBranch: String? = nil,
          lastSeenRelease: Int? = nil, lastSeenRun: Int? = nil, addedAt: Date = Date()) {
         self.owner = owner
         self.name = name
         self.watchRelease = watchRelease
         self.watchAction = watchAction
         self.notify = notify
+        self.pinned = pinned
         self.defaultBranch = defaultBranch
         self.lastSeenRelease = lastSeenRelease
         self.lastSeenRun = lastSeenRun
         self.addedAt = addedAt
     }
 
-    // Manual decoding so older persisted files (without `notify`) still load.
+    // Manual decoding so older persisted files (without `notify`/`pinned`) still load.
     private enum CodingKeys: String, CodingKey {
-        case owner, name, watchRelease, watchAction, notify,
+        case owner, name, watchRelease, watchAction, notify, pinned,
              defaultBranch, lastSeenRelease, lastSeenRun, addedAt
     }
 
@@ -42,6 +45,7 @@ struct TrackedRepo: Codable, Identifiable, Equatable {
         watchRelease = try c.decodeIfPresent(Bool.self, forKey: .watchRelease) ?? true
         watchAction = try c.decodeIfPresent(Bool.self, forKey: .watchAction) ?? true
         notify = try c.decodeIfPresent(Bool.self, forKey: .notify) ?? true
+        pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
         defaultBranch = try c.decodeIfPresent(String.self, forKey: .defaultBranch)
         lastSeenRelease = try c.decodeIfPresent(Int.self, forKey: .lastSeenRelease)
         lastSeenRun = try c.decodeIfPresent(Int.self, forKey: .lastSeenRun)

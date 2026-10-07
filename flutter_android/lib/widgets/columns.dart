@@ -14,8 +14,105 @@ import 'markdown_view.dart';
 import 'sheets.dart';
 
 /// ============================== Left column ==============================
-class LeftColumn extends StatelessWidget {
+/// The two sections of the repo list. Pinned repos sit above the boundary,
+/// plain repos below it; dragging a row across the "仓库列表" header re-parents
+/// it (see [_LeftColumnState._onReorder]).
+enum _RepoGroup { pinned, list }
+
+/// A flattened list row: either a group header or a repo. Headers are rendered
+/// but are not draggable; they only mark the pinned/list boundary.
+class _Entry {
+  const _Entry.header(this.group) : repo = null;
+  const _Entry.repo(this.group, this.repo);
+  final _RepoGroup group;
+  final TrackedRepo? repo;
+  bool get isHeader => repo == null;
+  Key get key => ValueKey(isHeader ? 'h-${group.name}' : 'r-${repo!.id}');
+}
+
+class LeftColumn extends StatefulWidget {
   const LeftColumn({super.key});
+
+  @override
+  State<LeftColumn> createState() => _LeftColumnState();
+}
+
+class _LeftColumnState extends State<LeftColumn> {
+  bool _pinnedCollapsed = false;
+  bool _listCollapsed = false;
+
+  /// Index the current drag started at, used to tell a real reorder (which
+  /// lands elsewhere) apart from a stationary long press (release opens the
+  /// row menu). `onReorderEnd` fires before `onReorder`, so we decide here.
+  int? _dragStartIndex;
+
+  List<_Entry> get _entries {
+    final out = <_Entry>[_Entry.header(_RepoGroup.pinned)];
+    if (!_pinnedCollapsed) {
+      out.addAll(store.repos
+          .where((r) => r.pinned)
+          .map((r) => _Entry.repo(_RepoGroup.pinned, r)));
+    }
+    out.add(const _Entry.header(_RepoGroup.list));
+    if (!_listCollapsed) {
+      out.addAll(store.repos
+          .where((r) => !r.pinned)
+          .map((r) => _Entry.repo(_RepoGroup.list, r)));
+    }
+    return out;
+  }
+
+  void _onReorder(int oldIndex, int newIndex) {
+    final items = List<_Entry>.of(_entries);
+    if (newIndex > oldIndex) newIndex -= 1;
+    final moved = items.removeAt(oldIndex);
+    items.insert(newIndex, moved);
+    final boundary =
+        items.indexWhere((e) => e.isHeader && e.group == _RepoGroup.list);
+    if (boundary < 0) return;
+    final pinned = <String>[];
+    final normal = <String>[];
+    for (var i = 0; i < items.length; i++) {
+      final e = items[i];
+      if (e.isHeader) continue;
+      (i < boundary ? pinned : normal).add(e.repo!.id);
+    }
+    // Re-attach rows hidden by a collapsed header so nothing is dropped.
+    if (_pinnedCollapsed) {
+      pinned.insertAll(0, store.repos.where((r) => r.pinned).map((r) => r.id));
+    }
+    if (_listCollapsed) {
+      normal.insertAll(
+          0, store.repos.where((r) => !r.pinned).map((r) => r.id));
+    }
+    store.applyRepoOrder(pinned, normal);
+  }
+
+  void _onReorderEnd(int index) {
+    final start = _dragStartIndex;
+    _dragStartIndex = null;
+    if (start == null) return;
+    // Dropped back where it started => treat the gesture as "long press" and
+    // open that row's menu instead of reordering.
+    if (index != start && index != start + 1) return;
+    final items = _entries;
+    if (start < 0 || start >= items.length) return;
+    final repo = items[start].repo;
+    if (repo == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showRepoMenu(context, repo);
+    });
+  }
+
+  void _toggle(_RepoGroup group) {
+    setState(() {
+      if (group == _RepoGroup.pinned) {
+        _pinnedCollapsed = !_pinnedCollapsed;
+      } else {
+        _listCollapsed = !_listCollapsed;
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,31 +120,88 @@ class LeftColumn extends StatelessWidget {
       color: T.column,
       child: ListenableBuilder(
         listenable: store,
-        builder: (context, _) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(14, 8, 14, 8),
-              child: Text('ghnew',
-                  style:
-                      TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: T.text)),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(6),
-                children: [
-                  for (final repo in store.repos)
-                    _RepoRow(
-                        repo: repo, selected: store.selectedRepoID == repo.id),
-                  _AddRepoRow(onTap: () => showAddRepo(context)),
-                ],
+        builder: (context, _) {
+          final entries = _entries;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(14, 8, 14, 8),
+                child: Text('ghnew',
+                    style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: T.text)),
               ),
-            ),
-            Divider(height: 1, color: T.border),
-            _LoginFooter(
-              onSettings: () => showSettings(context),
-              onLogin: () => showLogin(context),
-              onAccel: () => showAcceleration(context),
+              Expanded(
+                child: ReorderableListView.builder(
+                  buildDefaultDragHandles: false,
+                  padding: const EdgeInsets.all(6),
+                  itemCount: entries.length,
+                  onReorder: _onReorder,
+                  onReorderStart: (i) => _dragStartIndex = i,
+                  onReorderEnd: _onReorderEnd,
+                  footer: _AddRepoRow(onTap: () => showAddRepo(context)),
+                  itemBuilder: (context, i) {
+                    final e = entries[i];
+                    if (e.isHeader) {
+                      return _RepoGroupHeader(
+                        key: e.key,
+                        group: e.group,
+                        collapsed: e.group == _RepoGroup.pinned
+                            ? _pinnedCollapsed
+                            : _listCollapsed,
+                        onTap: () => _toggle(e.group),
+                      );
+                    }
+                    return ReorderableDelayedDragStartListener(
+                      key: e.key,
+                      index: i,
+                      child: _RepoRow(
+                          repo: e.repo!,
+                          selected: store.selectedRepoID == e.repo!.id),
+                    );
+                  },
+                ),
+              ),
+              Divider(height: 1, color: T.border),
+              _LoginFooter(
+                onSettings: () => showSettings(context),
+                onLogin: () => showLogin(context),
+                onAccel: () => showAcceleration(context),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _RepoGroupHeader extends StatelessWidget {
+  const _RepoGroupHeader(
+      {super.key,
+      required this.group,
+      required this.collapsed,
+      required this.onTap});
+  final _RepoGroup group;
+  final bool collapsed;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(6, 8, 6, 4),
+        child: Row(
+          children: [
+            Icon(collapsed ? Icons.chevron_right : Icons.expand_more,
+                size: 14, color: T.textMuted),
+            const SizedBox(width: 4),
+            Text(
+              L.str(group == _RepoGroup.pinned ? 'pinnedRepos' : 'repoList'),
+              style: TextStyle(fontSize: 11, color: T.textMuted),
             ),
           ],
         ),
@@ -65,7 +219,6 @@ class _RepoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: () => store.select(repo.id),
-      onLongPress: () => _menu(context),
       child: Container(
         padding: const EdgeInsets.all(10),
         margin: const EdgeInsets.only(bottom: 6),
@@ -96,38 +249,49 @@ class _RepoRow extends StatelessWidget {
       ),
     );
   }
+}
 
-  Future<void> _menu(BuildContext context) {
-    return showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: T.card,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(Icons.tune, color: T.blue),
-              title: Text(L.str('repoSettings'),
-                  style: TextStyle(color: T.text)),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                showRepoSettings(context, repo);
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.delete_outline, color: T.red),
-              title: Text(L.str('remove'),
-                  style: TextStyle(color: T.red)),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                store.removeRepo(repo);
-              },
-            ),
-          ],
-        ),
+/// Row action sheet. Opened by a stationary long press on a repo row.
+Future<void> _showRepoMenu(BuildContext context, TrackedRepo repo) {
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: T.card,
+    builder: (ctx) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: Icon(repo.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                color: T.blue),
+            title: Text(L.str(repo.pinned ? 'unpinRepo' : 'pinRepo'),
+                style: TextStyle(color: T.text)),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              store.togglePinned(repo.id);
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.tune, color: T.blue),
+            title: Text(L.str('repoSettings'),
+                style: TextStyle(color: T.text)),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              showRepoSettings(context, repo);
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.delete_outline, color: T.red),
+            title: Text(L.str('remove'),
+                style: TextStyle(color: T.red)),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              store.removeRepo(repo);
+            },
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _AddRepoRow extends StatelessWidget {

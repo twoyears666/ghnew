@@ -57,7 +57,7 @@ class AppStore extends ChangeNotifier {
 
   /// Load persisted state and begin polling.
   Future<void> init() async {
-    repos = await Storage.i.loadRepos();
+    repos = _pinnedFirst(await Storage.i.loadRepos());
     messages = (await Storage.i.loadMessages())
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     currentUser = await Storage.i.loadUser();
@@ -165,6 +165,53 @@ class AppStore extends ChangeNotifier {
     Storage.i.saveRepos(repos);
     notifyListeners();
   }
+
+  /// Star / unstar a repo (long-press menu). A newly pinned repo joins the end
+  /// of the pinned block; an unpinned one jumps to the top of the normal block.
+  void togglePinned(String id) {
+    final i = repos.indexWhere((r) => r.id == id);
+    if (i < 0) return;
+    final r = repos.removeAt(i);
+    r.pinned = !r.pinned;
+    final boundary = repos.indexWhere((x) => !x.pinned);
+    repos.insert(boundary < 0 ? repos.length : boundary, r);
+    Storage.i.saveRepos(repos);
+    notifyListeners();
+  }
+
+  /// Apply a drag-reorder: `pinnedIds` / `normalIds` are repo ids in their new
+  /// order, and group membership is derived from which list they arrived in.
+  void applyRepoOrder(List<String> pinnedIds, List<String> normalIds) {
+    final byId = {for (final r in repos) r.id: r};
+    final out = <TrackedRepo>[];
+    final pinnedFlags = <bool>[];
+    for (final id in pinnedIds) {
+      final r = byId[id];
+      if (r != null) {
+        out.add(r);
+        pinnedFlags.add(true);
+      }
+    }
+    for (final id in normalIds) {
+      final r = byId[id];
+      if (r != null) {
+        out.add(r);
+        pinnedFlags.add(false);
+      }
+    }
+    // Safety: never drop a repo (or half-apply) through a bad index mapping.
+    if (out.length != repos.length) return;
+    for (var i = 0; i < out.length; i++) {
+      out[i].pinned = pinnedFlags[i];
+    }
+    repos = out;
+    Storage.i.saveRepos(repos);
+    notifyListeners();
+  }
+
+  /// Stable partition: pinned repos first, preserving relative order.
+  static List<TrackedRepo> _pinnedFirst(List<TrackedRepo> list) =>
+      [...list.where((r) => r.pinned), ...list.where((r) => !r.pinned)];
 
   void select(String id) {
     selectedRepoID = id;
