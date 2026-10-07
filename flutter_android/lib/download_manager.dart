@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
@@ -49,6 +50,25 @@ class DownloadManager extends ChangeNotifier {
 
   /// Below this size a chunked download is not worth the overhead.
   static const _chunkThreshold = 1048576; // 1 MB
+
+  /// Absolute cap on simultaneous range connections across *every* active
+  /// download, so several parallel downloads can't multiply into a flood.
+  static const _globalConnectionLimit = 6;
+  /// The widest a single download's window is ever allowed to become.
+  static const _hardWindowCap = 8;
+  /// Connections a download opens with, before ramping toward its target.
+  static const _initialWindow = 2;
+  /// Most transport/HTTP errors a single chunk may suffer before we give up.
+  static const _maxAttempts = 4;
+  /// Most rate-limit responses a single chunk may hit before we give up.
+  static const _maxRateLimitEvents = 12;
+  /// After a rate-limit, ignore window ramping for this long to avoid flapping.
+  static const _rampQuiet = Duration(seconds: 20);
+  /// Longest single cool-down / Retry-After wait.
+  static const _maxCoolDown = Duration(seconds: 60);
+
+  /// Range connections currently in flight across all downloads.
+  int _globalActive = 0;
 
   final Map<String, DownloadItem> _items = {};
   DownloadItem? itemFor(String key) => _items[key];
@@ -209,6 +229,14 @@ class DownloadManager extends ChangeNotifier {
     }
   }
 
+  /// Download `url` into `target` in parallel byte-range chunks.
+  ///
+  /// Concurrency is deliberately conservative so a burst of parallel range
+  /// requests does not trip GitHub/CDN rate limits: chunks are fed through a
+  /// bounded window that starts small, ramps up while the server stays happy and
+  /// shrinks (down to a single connection) on 429/403/503. Rate-limited chunks
+  /// are re-queued after `Retry-After`, and a shared connection budget keeps N
+  /// simultaneous downloads from multiplying into N×level connections.
   Future<void> _runChunks(DownloadItem item, String url, String? token,
       int total, int level, File target) async {
     final safeKey = item.id.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
@@ -218,42 +246,63 @@ class DownloadManager extends ChangeNotifier {
 
     // Split [0, total) into `level` contiguous byte ranges.
     final chunkSize = (total / level).ceil();
-    final ranges = <List<int>>[];
+    final chunks = <_Chunk>[];
     var start = 0;
     while (start < total) {
       final end = (start + chunkSize - 1 < total - 1) ? start + chunkSize - 1 : total - 1;
-      ranges.add([start, end]);
+      chunks.add(_Chunk(start, end));
       start = end + 1;
     }
 
-    final received = List<int>.filled(ranges.length, 0);
-    final parts = List<File?>.filled(ranges.length, null);
-    var failed = false;
+    final received = List<int>.filled(chunks.length, 0);
+    final pending = <int>[for (var i = 0; i < chunks.length; i++) i];
+    final running = <int>{};
+    final waiting = <_Waiting>[];
 
-    Future<void> one(int i) async {
-      final s = ranges[i][0];
-      final e = ranges[i][1];
+    final maxWindow = level < 2 ? 2 : (level > _hardWindowCap ? _hardWindowCap : level);
+    var window = maxWindow < _initialWindow ? maxWindow : _initialWindow;
+    DateTime? cooldownUntil;
+    DateTime? lastRateLimit;
+    Object? fatalError;
+
+    Future<void> fetch(int i) async {
+      final c = chunks[i];
       final client = http.Client();
       try {
         final req = http.Request('GET', Uri.parse(url));
         req.headers.addAll(_headers(token));
-        req.headers['Range'] = 'bytes=$s-$e';
+        req.headers['Range'] = 'bytes=${c.start}-${c.end}';
         final resp = await client.send(req).timeout(const Duration(seconds: 30));
-        if (resp.statusCode != 206 && resp.statusCode != 200) {
+        final status = resp.statusCode;
+
+        if (_isRateLimit(status, resp)) {
           await resp.stream.drain<void>();
-          throw Exception('HTTP ${resp.statusCode}');
+          c.rateLimitEvents++;
+          if (c.rateLimitEvents > _maxRateLimitEvents) {
+            fatalError = Exception('HTTP $status (rate limited)');
+            return;
+          }
+          final delay = _retryAfter(resp);
+          window = window ~/ 2 < 1 ? 1 : window ~/ 2;
+          lastRateLimit = DateTime.now();
+          cooldownUntil = DateTime.now().add(delay);
+          waiting.add(_Waiting(i, DateTime.now().add(delay)));
+          return;
         }
+        if (status != 206) {
+          await resp.stream.drain<void>();
+          throw _HttpException(status);
+        }
+
         final part = File(p.join(partDir.path, 'part_$i'));
         final sink = part.openWrite();
         try {
           await for (final chunk in resp.stream) {
             sink.add(chunk);
             received[i] += chunk.length;
-            if (!failed) {
-              final sum = received.fold<int>(0, (a, b) => a + b);
-              item.progress = (sum / total).clamp(0.0, 1.0).toDouble();
-              notifyListeners();
-            }
+            final sum = received.fold<int>(0, (a, b) => a + b);
+            item.progress = (sum / total).clamp(0.0, 1.0).toDouble();
+            notifyListeners();
           }
           await sink.flush();
           await sink.close();
@@ -261,26 +310,90 @@ class DownloadManager extends ChangeNotifier {
           await sink.close();
           rethrow;
         }
-        parts[i] = part;
-      } catch (err) {
-        failed = true;
-        rethrow;
+
+        final expected = c.end - c.start + 1;
+        if (await part.length() != expected) {
+          throw Exception('Short read');   // truncated / error body
+        }
+        c.file = part;
+        // Widen slowly, and only after the server has been quiet for a while.
+        if (lastRateLimit == null ||
+            DateTime.now().difference(lastRateLimit!) > _rampQuiet) {
+          if (window < maxWindow) window++;
+        }
+      } catch (e) {
+        c.attempts++;
+        if (c.attempts > _maxAttempts) {
+          fatalError = e;
+          return;
+        }
+        waiting.add(_Waiting(i, DateTime.now().add(_backoff(c.attempts))));
       } finally {
         client.close();
       }
     }
 
     try {
-      await Future.wait([for (var i = 0; i < ranges.length; i++) one(i)]);
-      if (failed) throw Exception('Chunk download failed.');
-      final sink = target.openWrite();
-      for (final part in parts) {
-        await for (final chunk in part!.openRead()) {
-          sink.add(chunk);
+      while (true) {
+        if (fatalError != null) break;
+        final now = DateTime.now();
+
+        if (cooldownUntil != null && now.isBefore(cooldownUntil!)) {
+          final remaining = cooldownUntil!.difference(now);
+          await Future.delayed(
+              remaining > const Duration(milliseconds: 200)
+                  ? const Duration(milliseconds: 200)
+                  : remaining);
+          continue;
         }
+        cooldownUntil = null;
+
+        // Promote chunks whose back-off / cool-down has elapsed.
+        for (final w in waiting.toList()) {
+          if (!w.readyAt.isAfter(now)) {
+            waiting.remove(w);
+            pending.add(w.index);
+          }
+        }
+
+        if (pending.isEmpty && running.isEmpty && waiting.isEmpty) break;
+
+        if (pending.isEmpty ||
+            running.length >= window ||
+            _globalActive >= _globalConnectionLimit) {
+          await Future.delayed(const Duration(milliseconds: 60));
+          continue;
+        }
+
+        final idx = pending.removeAt(0);
+        running.add(idx);
+        _globalActive++;
+        unawaited(fetch(idx).whenComplete(() {
+          running.remove(idx);
+          if (_globalActive > 0) _globalActive--;
+        }));
       }
-      await sink.flush();
-      await sink.close();
+
+      if (fatalError != null) {
+        item.state = DlState.failed;
+        item.error = fatalError.toString();
+        notifyListeners();
+        return;
+      }
+
+      final sink = target.openWrite();
+      try {
+        for (final c in chunks) {
+          await for (final chunk in c.file!.openRead()) {
+            sink.add(chunk);
+          }
+        }
+        await sink.flush();
+        await sink.close();
+      } catch (_) {
+        await sink.close();
+        rethrow;
+      }
       item.filePath = target.path;
       item.state = DlState.done;
       item.progress = 1;
@@ -295,6 +408,44 @@ class DownloadManager extends ChangeNotifier {
         await partDir.delete(recursive: true);
       } catch (_) {}
     }
+  }
+
+  /// A 429/503, or a 403 that GitHub uses for rate limiting.
+  static bool _isRateLimit(int status, http.StreamedResponse r) {
+    if (status == 429 || status == 503) return true;
+    if (status == 403) {
+      if (r.headers['x-ratelimit-remaining'] == '0') return true;
+      if (r.headers.containsKey('retry-after')) return true;
+    }
+    return false;
+  }
+
+  /// How long to wait before retrying, from `Retry-After` / `X-RateLimit-Reset`.
+  static Duration _retryAfter(http.StreamedResponse r) {
+    final ra = r.headers['retry-after'];
+    if (ra != null) {
+      final s = int.tryParse(ra.trim());
+      if (s != null) return Duration(seconds: s.clamp(1, _maxCoolDown.inSeconds));
+    }
+    final reset = r.headers['x-ratelimit-reset'];
+    if (reset != null) {
+      final epoch = int.tryParse(reset.trim());
+      if (epoch != null) {
+        final d = DateTime.fromMillisecondsSinceEpoch(epoch * 1000)
+            .difference(DateTime.now());
+        if (d.inSeconds > 0) {
+          return Duration(seconds: d.inSeconds.clamp(1, _maxCoolDown.inSeconds));
+        }
+      }
+    }
+    return const Duration(seconds: 5);
+  }
+
+  /// Exponential back-off with a little jitter, capped at 15s.
+  static Duration _backoff(int attempts) {
+    final ms = (800 * math.pow(2, attempts)).toInt() +
+        math.Random().nextInt(400);
+    return Duration(milliseconds: ms > 15000 ? 15000 : ms);
   }
 
   /// Final on-disk name. Actions artifacts are zip archives whose GitHub name
@@ -474,4 +625,29 @@ class _UnzipResult {
   final File? file;
   final Directory? folder;
   const _UnzipResult(this.file, this.folder);
+}
+
+/// One contiguous byte range of a chunked download.
+class _Chunk {
+  final int start;
+  final int end;
+  int attempts = 0;
+  int rateLimitEvents = 0;
+  File? file;
+  _Chunk(this.start, this.end);
+}
+
+/// A chunk queued to retry once `readyAt` passes.
+class _Waiting {
+  final int index;
+  final DateTime readyAt;
+  _Waiting(this.index, this.readyAt);
+}
+
+/// A non-206 chunk response: the server ignored our Range or returned an error.
+class _HttpException implements Exception {
+  final int status;
+  _HttpException(this.status);
+  @override
+  String toString() => 'HTTP $status';
 }

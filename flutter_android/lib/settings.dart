@@ -81,7 +81,7 @@ class SettingsStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  int _concLevel = 4;
+  int _concLevel = 2;
   int get concLevel => _concLevel;
   set concLevel(int v) {
     if (_concLevel == v) return;
@@ -132,7 +132,7 @@ class SettingsStore extends ChangeNotifier {
     _relayArtifacts = p.getBool(_relayArtifactsKey) ?? false;
     _concEnabled = p.getBool(_concKey) ?? false;
     final level = p.getInt(_concLevelKey);
-    _concLevel = (level == null || level == 0) ? 4 : level;
+    _concLevel = (level == null || level == 0) ? 2 : level;
     _concArtifacts = p.getBool(_concArtifactsKey) ?? false;
     _autoUnzipArtifacts = p.getBool(_autoUnzipKey) ?? true;
   }

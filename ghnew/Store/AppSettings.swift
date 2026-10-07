@@ -77,7 +77,7 @@ final class AppSettings: ObservableObject {
         accelRelayIncludeArtifacts = def.bool(forKey: "ghSettings.accel.relay.artifacts")
         accelConcurrencyEnabled = def.bool(forKey: "ghSettings.accel.conc.enabled")
         let level = def.integer(forKey: "ghSettings.accel.conc.level")
-        accelConcurrencyLevel = level == 0 ? 4 : level
+        accelConcurrencyLevel = level == 0 ? 2 : level
         accelConcurrencyIncludeArtifacts = def.bool(forKey: "ghSettings.accel.conc.artifacts")
 
         // Defaults to on, so distinguish "unset" from an explicit false.
