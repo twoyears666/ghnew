@@ -30,6 +30,32 @@ final class AppStore: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private let pollInterval: TimeInterval = 300    // 5 minutes
 
+    /// How many messages a repo keeps on disk (releases + actions combined).
+    /// Older history is fetched on demand and never persisted.
+    private static let persistedPerRepo = 10
+    /// Page size used when fetching a repo's history.
+    private static let trackerPageSize = 10
+
+    /// Per-repo pagination cursor for the on-demand "load older" path.
+    private struct PageCursor {
+        var releasePage = 1
+        var runsPage = 1
+        var releaseDone = false
+        var runsDone = false
+    }
+    private var cursors: [String: PageCursor] = [:]
+    /// True while an on-demand older-page fetch is in flight.
+    @Published var olderLoading = false
+
+    /// Whether the selected repo still has older history to fetch.
+    var canLoadOlder: Bool {
+        guard let repo = selectedRepo, !olderLoading else { return false }
+        guard let c = cursors[repo.id] else { return true }   // not seeded yet → assume more
+        let releaseMore = repo.watchRelease && !c.releaseDone
+        let runMore = repo.watchAction && !c.runsDone
+        return releaseMore || runMore
+    }
+
     /// True when we have both a stored token and a fetched user.
     var isLoggedIn: Bool { currentUser?.login != nil && !(api.token ?? "").isEmpty }
 
@@ -51,6 +77,8 @@ final class AppStore: ObservableObject {
         repos = AppStore.pinnedFirst(Persistence.loadRepos())
         messages = Persistence.loadMessages().sorted { $0.createdAt > $1.createdAt }
         currentUser = Persistence.loadUser()
+        // Cap old data written by earlier versions to the persisted window.
+        for repo in repos { trimPersisted(for: repo.id) }
         if repos.first(where: { $0.id == selectedRepoID }) == nil {
             selectedRepoID = repos.first?.id
         }
@@ -122,6 +150,7 @@ final class AppStore: ObservableObject {
         Persistence.saveRepos(repos)
         for r in removed {
             if selectedRepoID == r.id { selectedRepoID = repos.first?.id }
+            cursors[r.id] = nil
             // drop its persisted messages
             for m in messages where m.repoID == r.id { Persistence.deleteMessage(m) }
             messages.removeAll { $0.repoID == r.id }
@@ -231,6 +260,7 @@ final class AppStore: ObservableObject {
     func resetAll() {
         for m in messages { Persistence.deleteMessage(m) }
         messages.removeAll()
+        cursors.removeAll()
         repos.removeAll()
         Persistence.saveRepos(repos)
         logout()
@@ -253,15 +283,30 @@ final class AppStore: ObservableObject {
 
     func refreshRepo(_ repo: TrackedRepo) async {
         var updated = repo
+        var releaseCount: Int?
+        var runCount: Int?
         do {
             if repo.watchRelease {
-                let releases = try await api.fetchReleases(owner: repo.owner, name: repo.name)
+                let releases = try await api.fetchReleases(owner: repo.owner, name: repo.name,
+                                                           page: 1, perPage: AppStore.trackerPageSize)
+                releaseCount = releases.count
                 updated.lastSeenRelease = processReleases(releases, repo: repo)
             }
             if repo.watchAction {
-                let runs = try await api.fetchRuns(owner: repo.owner, name: repo.name)
+                let runs = try await api.fetchRuns(owner: repo.owner, name: repo.name,
+                                                   page: 1, perPage: AppStore.trackerPageSize)
+                runCount = runs.count
                 updated.lastSeenRun = processRuns(runs, repo: repo)
             }
+            // Seed the pagination cursor once; later refreshes must not reset it
+            // (that would re-walk already loaded pages).
+            if cursors[repo.id] == nil {
+                cursors[repo.id] = PageCursor(
+                    releasePage: 1, runsPage: 1,
+                    releaseDone: !repo.watchRelease || (releaseCount ?? 0) < AppStore.trackerPageSize,
+                    runsDone: !repo.watchAction || (runCount ?? 0) < AppStore.trackerPageSize)
+            }
+            trimPersisted(for: repo.id)
             if let idx = repos.firstIndex(where: { $0.id == repo.id }) {
                 repos[idx] = updated
                 Persistence.saveRepos(repos)
@@ -269,6 +314,59 @@ final class AppStore: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    // MARK: - On-demand history
+
+    /// Fetch the next page of older releases/runs for the selected repo. These
+    /// messages are shown but deliberately not written to disk.
+    func loadOlder() async {
+        guard let repo = selectedRepo, !olderLoading else { return }
+        // Make sure page 1 is in memory so pagination continues without gaps.
+        if cursors[repo.id] == nil {
+            await refreshRepo(repo)
+            guard cursors[repo.id] != nil else { return }
+        }
+        olderLoading = true
+        defer { olderLoading = false }
+        var cursor = cursors[repo.id] ?? PageCursor()
+        if repo.watchRelease && !cursor.releaseDone {
+            let next = cursor.releasePage + 1
+            if let rels = try? await api.fetchReleases(owner: repo.owner, name: repo.name,
+                                                       page: next, perPage: AppStore.trackerPageSize) {
+                cursor.releasePage = next
+                if rels.count < AppStore.trackerPageSize { cursor.releaseDone = true }
+                for rel in rels { insertTransient(releaseMessage(rel, repo: repo)) }
+            }
+        }
+        if repo.watchAction && !cursor.runsDone {
+            let next = cursor.runsPage + 1
+            if let runs = try? await api.fetchRuns(owner: repo.owner, name: repo.name,
+                                                   page: next, perPage: AppStore.trackerPageSize) {
+                cursor.runsPage = next
+                if runs.count < AppStore.trackerPageSize { cursor.runsDone = true }
+                for run in runs { insertTransient(runMessage(run, repo: repo)) }
+            }
+        }
+        cursors[repo.id] = cursor
+    }
+
+    /// Delete persisted files beyond the newest `persistedPerRepo` for a repo.
+    private func trimPersisted(for repoID: String) {
+        let sorted = messages.filter { $0.repoID == repoID }
+                             .sorted { $0.createdAt > $1.createdAt }
+        guard sorted.count > AppStore.persistedPerRepo else { return }
+        for msg in sorted.dropFirst(AppStore.persistedPerRepo) {
+            Persistence.deleteMessage(msg)
+        }
+    }
+
+    /// True when a message falls inside the persisted window for its repo.
+    private func shouldPersist(_ msg: GHMessage) -> Bool {
+        let sorted = messages.filter { $0.repoID == msg.repoID }
+                             .sorted { $0.createdAt > $1.createdAt }
+        guard let idx = sorted.firstIndex(where: { $0.id == msg.id }) else { return false }
+        return idx < AppStore.persistedPerRepo
     }
 
     private func startPolling() {
@@ -298,26 +396,17 @@ final class AppStore: ObservableObject {
         messages[idx].runStatus = run.status
         messages[idx].runConclusion = run.conclusion
         messages[idx].duration = duration
-        Persistence.saveMessage(messages[idx])
+        if shouldPersist(messages[idx]) { Persistence.saveMessage(messages[idx]) }
     }
 
     // MARK: - Ingest
 
     private func processReleases(_ releases: [GHRelease], repo: TrackedRepo) -> Int? {
         var maxID = repo.lastSeenRelease
-        let base = "https://github.com/\(repo.owner)/\(repo.name)"
         for rel in releases {
-            let id = "r-\(repo.owner.lowercased())-\(repo.name.lowercased())-\(rel.id)"
-            let msg = GHMessage(id: id,
-                                repoID: repo.id,
-                                kind: .release,
-                                createdAt: rel.published_at?.ghDate ?? Date(),
-                                releaseTitle: rel.name?.nilIfEmpty ?? rel.tag_name ?? "Release",
-                                releaseTag: rel.tag_name,
-                                releaseBody: rel.body,
-                                isPrerelease: rel.prerelease ?? false,
-                                releaseURL: rel.html_url ?? "\(base)/releases")
-            if insertMessageIfNew(msg) {
+            // Only alert for genuinely new items, never for re-read history.
+            let isNew = (repo.lastSeenRelease ?? -1) < rel.id
+            if insertMessageIfNew(releaseMessage(rel, repo: repo), notify: isNew) {
                 maxID = max(maxID ?? 0, rel.id)
             }
         }
@@ -326,45 +415,68 @@ final class AppStore: ObservableObject {
 
     private func processRuns(_ runs: [GHRun], repo: TrackedRepo) -> Int? {
         var maxID = repo.lastSeenRun
-        let base = "https://github.com/\(repo.owner)/\(repo.name)"
         for run in runs {
-            let id = "a-\(repo.owner.lowercased())-\(repo.name.lowercased())-\(run.id)"
-            let start = run.run_started_at?.ghDate ?? run.created_at?.ghDate ?? Date()
-            var duration: TimeInterval?
-            if run.status == "completed", let end = run.updated_at?.ghDate {
-                duration = max(0, end.timeIntervalSince(start))
-            }
-            let actor = run.triggering_actor?.login ?? run.actor?.login ?? ""
-            let msg = GHMessage(id: id,
-                                repoID: repo.id,
-                                kind: .action,
-                                createdAt: start,
-                                actionTitle: run.display_title?.nilIfEmpty ?? "Workflow run",
-                                runNumber: run.run_number,
-                                runID: run.id,
-                                commitID: run.head_sha,
-                                actor: actor.nilIfEmpty,
-                                branch: run.head_branch,
-                                runStatus: run.status,
-                                runConclusion: run.conclusion,
-                                duration: duration,
-                                actionsURL: run.html_url ?? "\(base)/actions/runs/\(run.id)")
-            if insertMessageIfNew(msg) {
+            let isNew = (repo.lastSeenRun ?? -1) < run.id
+            if insertMessageIfNew(runMessage(run, repo: repo), notify: isNew) {
                 maxID = max(maxID ?? 0, run.id)
             }
         }
         return maxID
     }
 
+    private func releaseMessage(_ rel: GHRelease, repo: TrackedRepo) -> GHMessage {
+        let base = "https://github.com/\(repo.owner)/\(repo.name)"
+        return GHMessage(id: "r-\(repo.owner.lowercased())-\(repo.name.lowercased())-\(rel.id)",
+                         repoID: repo.id,
+                         kind: .release,
+                         createdAt: rel.published_at?.ghDate ?? Date(),
+                         releaseTitle: rel.name?.nilIfEmpty ?? rel.tag_name ?? "Release",
+                         releaseTag: rel.tag_name,
+                         releaseBody: rel.body,
+                         isPrerelease: rel.prerelease ?? false,
+                         releaseURL: rel.html_url ?? "\(base)/releases")
+    }
+
+    private func runMessage(_ run: GHRun, repo: TrackedRepo) -> GHMessage {
+        let base = "https://github.com/\(repo.owner)/\(repo.name)"
+        let start = run.run_started_at?.ghDate ?? run.created_at?.ghDate ?? Date()
+        var duration: TimeInterval?
+        if run.status == "completed", let end = run.updated_at?.ghDate {
+            duration = max(0, end.timeIntervalSince(start))
+        }
+        let actor = run.triggering_actor?.login ?? run.actor?.login ?? ""
+        return GHMessage(id: "a-\(repo.owner.lowercased())-\(repo.name.lowercased())-\(run.id)",
+                         repoID: repo.id,
+                         kind: .action,
+                         createdAt: start,
+                         actionTitle: run.display_title?.nilIfEmpty ?? "Workflow run",
+                         runNumber: run.run_number,
+                         runID: run.id,
+                         commitID: run.head_sha,
+                         actor: actor.nilIfEmpty,
+                         branch: run.head_branch,
+                         runStatus: run.status,
+                         runConclusion: run.conclusion,
+                         duration: duration,
+                         actionsURL: run.html_url ?? "\(base)/actions/runs/\(run.id)")
+    }
+
     @discardableResult
-    private func insertMessageIfNew(_ msg: GHMessage) -> Bool {
+    private func insertMessageIfNew(_ msg: GHMessage, notify: Bool) -> Bool {
         guard !messages.contains(where: { $0.id == msg.id }) else { return false }
         messages.append(msg)
         Persistence.saveMessage(msg)
-        if let repo = repos.first(where: { $0.id == msg.repoID }), repo.notify {
+        if notify, let repo = repos.first(where: { $0.id == msg.repoID }), repo.notify {
             postNotification(for: msg)
         }
         return true
+    }
+
+    /// Append a message to the in-memory list only — used for older history
+    /// loaded on demand, which must never touch disk or raise notifications.
+    private func insertTransient(_ msg: GHMessage) {
+        guard !messages.contains(where: { $0.id == msg.id }) else { return }
+        messages.append(msg)
     }
 
     private func postNotification(for msg: GHMessage) {

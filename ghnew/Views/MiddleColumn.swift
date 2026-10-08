@@ -75,6 +75,18 @@ struct MiddleColumn: View {
                                 ActionCard(message: msg)
                             }
                         }
+                        // Bottom sentinel: pulls older history (kept in memory only) when
+                        // the list is scrolled to its end.
+                        if store.olderLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                        } else if store.canLoadOlder {
+                            Color.clear
+                                .frame(height: 20)
+                                .onAppear { Task { await store.loadOlder() } }
+                        }
                     }
                     .padding(.horizontal, 14)
                     .padding(.top, 6)

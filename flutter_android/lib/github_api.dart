@@ -83,17 +83,19 @@ class GitHubApi {
     }
   }
 
-  Future<List<GhRelease>> fetchReleases(String owner, String name) async {
+  Future<List<GhRelease>> fetchReleases(String owner, String name,
+      {int page = 1, int perPage = 30}) async {
     final j = await _get(
-        '/repos/$owner/$name/releases?per_page=30');
+        '/repos/$owner/$name/releases?per_page=$perPage&page=$page');
     return (j as List)
         .map((e) => GhRelease.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 
-  Future<List<GhRun>> fetchRuns(String owner, String name) async {
+  Future<List<GhRun>> fetchRuns(String owner, String name,
+      {int page = 1, int perPage = 30}) async {
     final j = await _get(
-        '/repos/$owner/$name/actions/runs?per_page=30');
+        '/repos/$owner/$name/actions/runs?per_page=$perPage&page=$page');
     final list = (j as Map<String, dynamic>)['workflow_runs'] as List? ?? [];
     return list
         .map((e) => GhRun.fromJson(e as Map<String, dynamic>))

@@ -255,6 +255,7 @@ class DownloadManager extends ChangeNotifier {
     }
 
     final received = List<int>.filled(chunks.length, 0);
+    var reported = 0; // monotonic progress high-water mark
     final pending = <int>[for (var i = 0; i < chunks.length; i++) i];
     final running = <int>{};
     final waiting = <_Waiting>[];
@@ -267,6 +268,7 @@ class DownloadManager extends ChangeNotifier {
 
     Future<void> fetch(int i) async {
       final c = chunks[i];
+      received[i] = 0; // a fresh attempt restarts this chunk's counter
       final client = http.Client();
       try {
         final req = http.Request('GET', Uri.parse(url));
@@ -300,8 +302,11 @@ class DownloadManager extends ChangeNotifier {
           await for (final chunk in resp.stream) {
             sink.add(chunk);
             received[i] += chunk.length;
+            // A retried chunk restarts from zero, so a raw sum can drop and make
+            // the bar jump backwards. Report a monotonic high-water mark instead.
             final sum = received.fold<int>(0, (a, b) => a + b);
-            item.progress = (sum / total).clamp(0.0, 1.0).toDouble();
+            if (sum > reported) reported = sum;
+            item.progress = (reported / total).clamp(0.0, 1.0).toDouble();
             notifyListeners();
           }
           await sink.flush();

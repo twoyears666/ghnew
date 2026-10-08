@@ -472,17 +472,39 @@ class MiddleColumn extends StatelessWidget {
                       )
                     : RefreshIndicator(
                         onRefresh: store.refreshAll,
-                        child: ListView(
+                        child: ListView.builder(
                           padding: const EdgeInsets.fromLTRB(14, 6, 14, 24),
-                          children: [
-                            for (final m in msgs)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: m.kind == MessageKind.release
-                                    ? ReleaseCard(message: m)
-                                    : ActionCard(message: m),
-                              ),
-                          ],
+                          itemCount: msgs.length +
+                              ((store.canLoadOlder || store.olderLoading)
+                                  ? 1
+                                  : 0),
+                          itemBuilder: (context, i) {
+                            if (i >= msgs.length) {
+                              // Bottom sentinel: pulls older history (memory
+                              // only) once it scrolls into view.
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (store.canLoadOlder) store.loadOlder();
+                              });
+                              return const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 16),
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  ),
+                                ),
+                              );
+                            }
+                            final m = msgs[i];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: m.kind == MessageKind.release
+                                  ? ReleaseCard(message: m)
+                                  : ActionCard(message: m),
+                            );
+                          },
                         ),
                       ),
               ),

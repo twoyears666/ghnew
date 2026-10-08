@@ -60,15 +60,17 @@ final class GitHubAPI {
         return try? JSONDecoder().decode(GitHubUser.self, from: data)
     }
 
-    func fetchReleases(owner: String, name: String) async throws -> [GHRelease] {
-        let path = "/repos/\(owner)/\(name)/releases?per_page=30"
+    func fetchReleases(owner: String, name: String, page: Int = 1,
+                       perPage: Int = 30) async throws -> [GHRelease] {
+        let path = "/repos/\(owner)/\(name)/releases?per_page=\(perPage)&page=\(page)"
         let (data, resp) = try await session.data(for: makeRequest(path))
         try Self.throwIfErrors(data: data, response: resp)
         return try JSONDecoder().decode([GHRelease].self, from: data)
     }
 
-    func fetchRuns(owner: String, name: String) async throws -> [GHRun] {
-        let path = "/repos/\(owner)/\(name)/actions/runs?per_page=30"
+    func fetchRuns(owner: String, name: String, page: Int = 1,
+                   perPage: Int = 30) async throws -> [GHRun] {
+        let path = "/repos/\(owner)/\(name)/actions/runs?per_page=\(perPage)&page=\(page)"
         let (data, resp) = try await session.data(for: makeRequest(path))
         try Self.throwIfErrors(data: data, response: resp)
         let wrapped = try JSONDecoder().decode(RunListResponse.self, from: data)

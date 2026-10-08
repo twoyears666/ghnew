@@ -63,6 +63,7 @@ final class ChunkedDownloader: NSObject {
         var waiting: [(index: Int, readyAt: Date)]      // backing off / cooling down
         var running: Set<Int>
         var bytes: [Int64]
+        var reported: Int64                           // monotonic progress high-water mark
         var window: Int
         let maxWindow: Int
         var cooldownUntil: Date?
@@ -129,7 +130,7 @@ final class ChunkedDownloader: NSObject {
         jobs[key] = Job(key: key, url: url, token: token, total: total, target: target,
                         partDir: partDir, chunks: chunks,
                         pending: Array(chunks.indices), waiting: [], running: [],
-                        bytes: Array(repeating: 0, count: chunks.count),
+                        bytes: Array(repeating: 0, count: chunks.count), reported: 0,
                         window: min(maxWindow, Self.initialWindow), maxWindow: maxWindow,
                         cooldownUntil: nil, lastRateLimit: nil)
         pump(key: key)
@@ -170,6 +171,7 @@ final class ChunkedDownloader: NSObject {
               let index = job.pending.first {
             job.pending.removeFirst()
             job.running.insert(index)
+            job.bytes[index] = 0   // a fresh attempt restarts this chunk's counter
             activeConnections += 1
             launch(key: key, job: job, index: index)
         }
@@ -349,8 +351,12 @@ extension ChunkedDownloader: URLSessionDownloadDelegate {
         guard let (key, index) = taskMap[downloadTask.taskIdentifier],
               var job = jobs[key], index < job.bytes.count else { return }
         job.bytes[index] = totalBytesWritten
+        // A chunk that is retried restarts from zero, so a raw sum can drop and
+        // make the bar jump backwards. Report a monotonic high-water mark instead.
+        let sum = job.bytes.reduce(0, +)
+        let received = max(job.reported, sum)
+        job.reported = received
         jobs[key] = job
-        let received = job.bytes.reduce(0, +)
         onProgress?(key, min(max(Double(received) / Double(job.total), 0), 1))
     }
 
