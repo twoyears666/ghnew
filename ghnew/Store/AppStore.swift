@@ -29,6 +29,9 @@ final class AppStore: ObservableObject {
     private let api = GitHubAPI.shared
     private var pollTask: Task<Void, Never>?
     private let pollInterval: TimeInterval = 300    // 5 minutes
+    /// While a tracked run is still queued or running, poll faster so its
+    /// start/finish notifications land promptly instead of minutes late.
+    private let runningPollInterval: TimeInterval = 60
 
     /// How many messages a repo keeps on disk (releases + actions combined).
     /// Older history is fetched on demand and never persisted.
@@ -372,10 +375,19 @@ final class AppStore: ObservableObject {
     private func startPolling() {
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64(self?.pollInterval ?? 300) * 1_000_000_000)
+                let interval = self?.nextPollInterval() ?? 300
+                try? await Task.sleep(nanoseconds: UInt64(interval) * 1_000_000_000)
                 await self?.refreshAll()
             }
         }
+    }
+
+    /// A run that has not concluded yet keeps the poller on a short leash.
+    private func nextPollInterval() -> TimeInterval {
+        let busy = messages.contains {
+            $0.kind == .action && ($0.runStatus ?? "") != "completed"
+        }
+        return busy ? runningPollInterval : pollInterval
     }
 
     /// Refresh a single action's live status (used while a running action is on
@@ -384,19 +396,17 @@ final class AppStore: ObservableObject {
     func refreshActionStatus(for msg: GHMessage) async {
         guard msg.kind == .action,
               let repo = repos.first(where: { $0.id == msg.repoID }),
-              let runID = msg.runID else { return }
+              let runID = msg.runID,
+              let idx = messages.firstIndex(where: { $0.id == msg.id }) else { return }
         guard let run = try? await api.fetchRuns(owner: repo.owner, name: repo.name)
             .first(where: { $0.id == runID }) else { return }
-        let start = run.run_started_at?.ghDate ?? run.created_at?.ghDate ?? msg.createdAt
-        var duration = msg.duration
-        if run.status == "completed", let end = run.updated_at?.ghDate {
-            duration = max(0, end.timeIntervalSince(start))
-        }
-        guard let idx = messages.firstIndex(where: { $0.id == msg.id }) else { return }
-        messages[idx].runStatus = run.status
-        messages[idx].runConclusion = run.conclusion
-        messages[idx].duration = duration
-        if shouldPersist(messages[idx]) { Persistence.saveMessage(messages[idx]) }
+        var updated = messages[idx]
+        updated.runStatus = run.status
+        updated.runConclusion = run.conclusion
+        updated.duration = runMessage(run, repo: repo).duration ?? updated.duration
+        updated = withRunAlerts(updated, repo: repo)
+        messages[idx] = updated
+        if shouldPersist(updated) { Persistence.saveMessage(updated) }
     }
 
     // MARK: - Ingest
@@ -406,22 +416,63 @@ final class AppStore: ObservableObject {
         for rel in releases {
             // Only alert for genuinely new items, never for re-read history.
             let isNew = (repo.lastSeenRelease ?? -1) < rel.id
-            if insertMessageIfNew(releaseMessage(rel, repo: repo), notify: isNew) {
+            if insertReleaseIfNew(releaseMessage(rel, repo: repo), notify: isNew) {
                 maxID = max(maxID ?? 0, rel.id)
             }
         }
         return maxID
     }
 
+    /// Ingest a page of workflow runs. Runs already in the inbox are updated in
+    /// place instead of being ignored, so a run first seen while queued still
+    /// reports back once it concludes.
     private func processRuns(_ runs: [GHRun], repo: TrackedRepo) -> Int? {
         var maxID = repo.lastSeenRun
+        // First pull after adding a repo: its history is not news, so mark it as
+        // already announced rather than firing a banner for every old run.
+        let seeding = repo.lastSeenRun == nil
         for run in runs {
-            let isNew = (repo.lastSeenRun ?? -1) < run.id
-            if insertMessageIfNew(runMessage(run, repo: repo), notify: isNew) {
+            var msg = runMessage(run, repo: repo)
+            if let idx = messages.firstIndex(where: { $0.id == msg.id }) {
+                msg.startNotified = messages[idx].startNotified
+                msg.completedNotified = messages[idx].completedNotified
+                msg = withRunAlerts(msg, repo: repo)
+                messages[idx] = msg
+                if shouldPersist(msg) { Persistence.saveMessage(msg) }
+            } else {
+                if seeding {
+                    msg.startNotified = true
+                    msg.completedNotified = msg.runStatus == "completed"
+                }
+                msg = withRunAlerts(msg, repo: repo)
+                messages.append(msg)
+                Persistence.saveMessage(msg)
                 maxID = max(maxID ?? 0, run.id)
             }
         }
         return maxID
+    }
+
+    /// Post the alerts a run owes right now — one when it starts, one when it
+    /// concludes — and mark each as delivered so a run never alerts twice.
+    private func withRunAlerts(_ msg: GHMessage, repo: TrackedRepo) -> GHMessage {
+        var out = msg
+        guard repo.notify else {
+            out.startNotified = true
+            if msg.runStatus == "completed" { out.completedNotified = true }
+            return out
+        }
+        if msg.runStatus == "completed" {
+            if !out.completedNotified {
+                out.completedNotified = true
+                postRunNotification(for: out, phase: .completed)
+            }
+            out.startNotified = true
+        } else if !out.startNotified {
+            out.startNotified = true
+            postRunNotification(for: out, phase: .started)
+        }
+        return out
     }
 
     private func releaseMessage(_ rel: GHRelease, repo: TrackedRepo) -> GHMessage {
@@ -462,12 +513,14 @@ final class AppStore: ObservableObject {
     }
 
     @discardableResult
-    private func insertMessageIfNew(_ msg: GHMessage, notify: Bool) -> Bool {
+    private func insertReleaseIfNew(_ msg: GHMessage, notify: Bool) -> Bool {
         guard !messages.contains(where: { $0.id == msg.id }) else { return false }
         messages.append(msg)
         Persistence.saveMessage(msg)
         if notify, let repo = repos.first(where: { $0.id == msg.repoID }), repo.notify {
-            postNotification(for: msg)
+            postNotification(title: Localization.L("notifyNewRelease"),
+                             body: "\(msg.repoID) · \(msg.releaseTitle ?? "")",
+                             identifier: msg.id)
         }
         return true
     }
@@ -479,20 +532,32 @@ final class AppStore: ObservableObject {
         messages.append(msg)
     }
 
-    private func postNotification(for msg: GHMessage) {
+    /// The two moments an action run alerts on: it started / it concluded.
+    private enum RunPhase: String {
+        case started, completed
+    }
+
+    private func postRunNotification(for msg: GHMessage, phase: RunPhase) {
+        let title: String
+        if phase == .started {
+            title = Localization.L("notifyRunStarted")
+        } else {
+            title = "\(Localization.L("notifyRunCompleted")) · \(msg.runConclusion ?? msg.runStatus ?? "")"
+        }
+        postNotification(title: title,
+                         body: "\(msg.repoID) · \(msg.actionTitle ?? "")",
+                         identifier: "\(msg.id)-\(phase.rawValue)")
+    }
+
+    private func postNotification(title: String, body: String, identifier: String) {
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
             guard settings.authorizationStatus == .authorized else { return }
             let content = UNMutableNotificationContent()
-            if msg.kind == .release {
-                content.title = "New release"
-                content.body = "\(msg.repoID) · \(msg.releaseTitle ?? "")"
-            } else {
-                content.title = "Action \(msg.runConclusion ?? msg.runStatus ?? "")"
-                content.body = "\(msg.repoID) · \(msg.releaseTitle ?? msg.actionTitle ?? "")"
-            }
+            content.title = title
+            content.body = body
             content.sound = .default
-            let req = UNNotificationRequest(identifier: msg.id, content: content, trigger: nil)
+            let req = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
             center.add(req)
         }
     }

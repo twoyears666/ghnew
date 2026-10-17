@@ -85,6 +85,11 @@ struct GHMessage: Codable, Identifiable, Equatable {
     var duration: TimeInterval?
     var actionsURL: String?
 
+    // Notification bookkeeping for action runs: a run alerts once when it starts
+    // and once when it finishes, so each phase gets its own delivered flag.
+    var startNotified: Bool = false
+    var completedNotified: Bool = false
+
     // Pills / computed
 
     /// Release pill label derived from the tag, per GitHub tagging conventions.
@@ -99,6 +104,44 @@ struct GHMessage: Codable, Identifiable, Equatable {
 
     var isReleaseBadgeGreen: Bool {
         releaseBadge == "release" || releaseBadge.contains("stable")
+    }
+}
+
+extension GHMessage {
+    // Manual decoding so messages persisted before the notification flags existed
+    // still load. Declared here (not in the struct body) to keep the memberwise
+    // initializer the callers rely on.
+    private enum CodingKeys: String, CodingKey {
+        case id, repoID, kind, createdAt
+        case releaseTitle, releaseTag, releaseBody, isPrerelease, releaseURL
+        case actionTitle, runNumber, runID, commitID, actor, branch,
+             runStatus, runConclusion, duration, actionsURL,
+             startNotified, completedNotified
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        repoID = try c.decode(String.self, forKey: .repoID)
+        kind = try c.decode(MessageKind.self, forKey: .kind)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        releaseTitle = try c.decodeIfPresent(String.self, forKey: .releaseTitle)
+        releaseTag = try c.decodeIfPresent(String.self, forKey: .releaseTag)
+        releaseBody = try c.decodeIfPresent(String.self, forKey: .releaseBody)
+        isPrerelease = try c.decodeIfPresent(Bool.self, forKey: .isPrerelease) ?? false
+        releaseURL = try c.decodeIfPresent(String.self, forKey: .releaseURL)
+        actionTitle = try c.decodeIfPresent(String.self, forKey: .actionTitle)
+        runNumber = try c.decodeIfPresent(Int.self, forKey: .runNumber)
+        runID = try c.decodeIfPresent(Int.self, forKey: .runID)
+        commitID = try c.decodeIfPresent(String.self, forKey: .commitID)
+        actor = try c.decodeIfPresent(String.self, forKey: .actor)
+        branch = try c.decodeIfPresent(String.self, forKey: .branch)
+        runStatus = try c.decodeIfPresent(String.self, forKey: .runStatus)
+        runConclusion = try c.decodeIfPresent(String.self, forKey: .runConclusion)
+        duration = try c.decodeIfPresent(TimeInterval.self, forKey: .duration)
+        actionsURL = try c.decodeIfPresent(String.self, forKey: .actionsURL)
+        startNotified = try c.decodeIfPresent(Bool.self, forKey: .startNotified) ?? false
+        completedNotified = try c.decodeIfPresent(Bool.self, forKey: .completedNotified) ?? false
     }
 }
 
