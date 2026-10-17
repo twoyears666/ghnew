@@ -1,6 +1,7 @@
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 
+import 'alerts.dart';
 import 'app_store.dart';
 import 'content_view.dart';
 import 'download_manager.dart';
@@ -10,6 +11,7 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SettingsStore.i.init();
+  await Alerts.i.init();
   await store.init();
   runApp(const GhnewApp());
 }

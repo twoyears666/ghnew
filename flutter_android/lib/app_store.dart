@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'alerts.dart';
 import 'crypto.dart';
 import 'github_api.dart';
+import 'l10n.dart';
 import 'models.dart';
 import 'persistence.dart';
 
@@ -29,6 +31,9 @@ class AppStore extends ChangeNotifier {
 
   Timer? _pollTimer;
   static const _pollInterval = Duration(minutes: 5);
+  /// A run that has not concluded yet keeps the poller on a short leash.
+  static const _runningPollInterval = Duration(seconds: 60);
+  bool _disposed = false;
 
   /// How many messages a repo keeps on disk (releases + actions combined).
   /// Older history is fetched on demand and never persisted.
@@ -441,21 +446,63 @@ class AppStore extends ChangeNotifier {
   int? _processReleases(List<GhRelease> releases, TrackedRepo repo) {
     var maxId = repo.lastSeenRelease;
     for (final rel in releases) {
-      if (_insertMessageIfNew(_releaseMessage(rel, repo))) {
+      // Only alert for genuinely new items, never for re-read history.
+      final isNew = (repo.lastSeenRelease ?? -1) < rel.id;
+      if (_insertReleaseIfNew(_releaseMessage(rel, repo), notify: isNew)) {
         maxId = maxId == null ? rel.id : (rel.id > maxId ? rel.id : maxId);
       }
     }
     return maxId;
   }
 
+  /// Ingest a page of workflow runs. Runs already in the inbox are updated in
+  /// place instead of being ignored, so a run first seen while queued still
+  /// reports back once it concludes.
   int? _processRuns(List<GhRun> runs, TrackedRepo repo) {
     var maxId = repo.lastSeenRun;
+    // First pull after adding a repo: its history is not news, so mark it as
+    // already announced rather than firing a banner for every old run.
+    final seeding = repo.lastSeenRun == null;
     for (final run in runs) {
-      if (_insertMessageIfNew(_runMessage(run, repo))) {
+      final msg = _runMessage(run, repo);
+      final idx = messages.indexWhere((m) => m.id == msg.id);
+      if (idx >= 0) {
+        msg.startNotified = messages[idx].startNotified;
+        msg.completedNotified = messages[idx].completedNotified;
+        messages[idx] = _withRunAlerts(msg, repo);
+        Storage.i.saveMessage(messages[idx]);
+      } else {
+        if (seeding) {
+          msg.startNotified = true;
+          msg.completedNotified = msg.runStatus == 'completed';
+        }
+        messages.add(_withRunAlerts(msg, repo));
+        Storage.i.saveMessage(msg);
         maxId = maxId == null ? run.id : (run.id > maxId ? run.id : maxId);
       }
     }
     return maxId;
+  }
+
+  /// Post the alerts a run owes right now — one when it starts, one when it
+  /// concludes — and mark each as delivered so a run never alerts twice.
+  GHMessage _withRunAlerts(GHMessage msg, TrackedRepo repo) {
+    if (!repo.notify) {
+      msg.startNotified = true;
+      if (msg.runStatus == 'completed') msg.completedNotified = true;
+      return msg;
+    }
+    if (msg.runStatus == 'completed') {
+      if (!msg.completedNotified) {
+        msg.completedNotified = true;
+        _postRunNotification(msg, _RunPhase.completed);
+      }
+      msg.startNotified = true;
+    } else if (!msg.startNotified) {
+      msg.startNotified = true;
+      _postRunNotification(msg, _RunPhase.started);
+    }
+    return msg;
   }
 
   GHMessage _releaseMessage(GhRelease rel, TrackedRepo repo) {
@@ -511,11 +558,51 @@ class AppStore extends ChangeNotifier {
     );
   }
 
-  bool _insertMessageIfNew(GHMessage msg) {
+  /// Insert a release unless it is already in the inbox. `notify` is false for
+  /// history re-read on a first pull, which is not news.
+  bool _insertReleaseIfNew(GHMessage msg, {required bool notify}) {
     if (messages.any((m) => m.id == msg.id)) return false;
     messages.add(msg);
     Storage.i.saveMessage(msg);
+    if (notify) {
+      for (final r in repos) {
+        if (r.id == msg.repoID) {
+          if (r.notify) {
+            _postNotification(
+              title: L.str('notifyNewRelease'),
+              body: '${msg.repoID} · ${msg.releaseTitle ?? ''}',
+              identifier: msg.id,
+            );
+          }
+          break;
+        }
+      }
+    }
     return true;
+  }
+
+  /// The two moments an action run alerts on: it started / it concluded.
+  void _postRunNotification(GHMessage msg, _RunPhase phase) {
+    final String title;
+    if (phase == _RunPhase.started) {
+      title = L.str('notifyRunStarted');
+    } else {
+      title =
+          '${L.str('notifyRunCompleted')} · ${msg.runConclusion ?? msg.runStatus ?? ''}';
+    }
+    _postNotification(
+      title: title,
+      body: '${msg.repoID} · ${msg.actionTitle ?? ''}',
+      identifier: '${msg.id}-${phase.name}',
+    );
+  }
+
+  void _postNotification({
+    required String title,
+    required String body,
+    required String identifier,
+  }) {
+    Alerts.i.show(identifier: identifier, title: title, body: body);
   }
 
   /// Append a message to the in-memory list only — used for older history
@@ -532,17 +619,36 @@ class AppStore extends ChangeNotifier {
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(_pollInterval, (_) {
-      refreshAll();
+    _scheduleNextPoll();
+  }
+
+  /// One-shot timer re-armed each cycle so the interval can shorten while a run
+  /// is still in flight and relax again once everything has concluded.
+  void _scheduleNextPoll() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer(_nextPollInterval(), () async {
+      await refreshAll();
+      if (_disposed) return;
+      _scheduleNextPoll();
     });
+  }
+
+  Duration _nextPollInterval() {
+    final busy = messages.any((m) =>
+        m.kind == MessageKind.action && (m.runStatus ?? '') != 'completed');
+    return busy ? _runningPollInterval : _pollInterval;
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _pollTimer?.cancel();
     super.dispose();
   }
 }
+
+/// The two moments an action run alerts on: it started / it concluded.
+enum _RunPhase { started, completed }
 
 /// Per-repo pagination cursor for the on-demand "load older" path.
 class _PageCursor {

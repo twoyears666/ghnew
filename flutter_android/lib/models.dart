@@ -84,6 +84,11 @@ class GHMessage {
   Duration? duration;
   String? actionsURL;
 
+  /// Whether the "run started" / "run finished" banner was already posted.
+  /// Persisted so a run alerts at most once per phase, even across launches.
+  bool startNotified;
+  bool completedNotified;
+
   GHMessage({
     required this.id,
     required this.repoID,
@@ -104,6 +109,8 @@ class GHMessage {
     this.runConclusion,
     this.duration,
     this.actionsURL,
+    this.startNotified = false,
+    this.completedNotified = false,
   });
 
   String get releaseBadge {
@@ -140,6 +147,8 @@ class GHMessage {
             ? Duration(milliseconds: j['duration'] as int)
             : null,
         actionsURL: j['actionsURL'] as String?,
+        startNotified: j['startNotified'] as bool? ?? false,
+        completedNotified: j['completedNotified'] as bool? ?? false,
       );
 
   Map<String, dynamic> toJson() => {
@@ -162,6 +171,8 @@ class GHMessage {
         'runConclusion': runConclusion,
         'duration': duration?.inMilliseconds,
         'actionsURL': actionsURL,
+        'startNotified': startNotified,
+        'completedNotified': completedNotified,
       };
 }
 

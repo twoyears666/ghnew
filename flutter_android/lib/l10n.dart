@@ -103,6 +103,11 @@ class L {
     'unzipFolderMessage': ('该产物包含多个文件，已解压到同名文件夹。是否打开文件夹查看？',
         'This artifact holds several files and was unpacked into a folder. Open the folder to view it?'),
     'openFolder': ('打开文件夹', 'Open folder'),
+
+    // Notifications
+    'notifyNewRelease': ('新 Release', 'New release'),
+    'notifyRunStarted': ('Action 开始编译', 'Action started'),
+    'notifyRunCompleted': ('Action 编译完成', 'Action finished'),
   };
 
   static String str(String key) {
