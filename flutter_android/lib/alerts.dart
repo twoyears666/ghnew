@@ -46,7 +46,7 @@ class Alerts {
   InitializationSettings? _initializationSettings() {
     if (Platform.isAndroid) {
       return const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings('@drawable/ic_notification'),
       );
     }
     if (Platform.isWindows) {
