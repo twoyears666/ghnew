@@ -16,11 +16,7 @@ class Alerts {
 
   static const _channelId = 'ghnew_action_runs';
   static const _channelName = 'Action runs';
-  static const _androidChannel = AndroidNotificationChannel(
-    _channelId,
-    _channelName,
-    description: 'Started and finished action runs',
-  );
+  static const _channelDescription = 'Started and finished action runs';
 
   /// Stable identity for Windows toast activation (must never change).
   static const _windowsGuid = '1f0e6b4a-9c37-4d52-8a71-6b2e9d4c0f83';
@@ -34,13 +30,13 @@ class Alerts {
     try {
       final settings = _initializationSettings();
       if (settings == null) return; // no implementation on this platform
-      await _plugin.initialize(settings);
-      final android = _plugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
-      if (android != null) {
-        await android.createNotificationChannel(_androidChannel);
-        await android.requestNotificationsPermission();
-      }
+      await _plugin.initialize(settings: settings);
+      // The Android channel is created implicitly by the first show(); all we
+      // need up front is the runtime permission.
+      await _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
       _ready = true;
     } catch (_) {
       _ready = false;
@@ -75,13 +71,14 @@ class Alerts {
     if (!_ready) return;
     try {
       await _plugin.show(
-        identifier.hashCode & 0x7fffffff,
-        title,
-        body,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
+        id: identifier.hashCode & 0x7fffffff,
+        title: title,
+        body: body,
+        notificationDetails: NotificationDetails(
+          android: const AndroidNotificationDetails(
             _channelId,
             _channelName,
+            channelDescription: _channelDescription,
             importance: Importance.defaultImportance,
             priority: Priority.defaultPriority,
           ),
